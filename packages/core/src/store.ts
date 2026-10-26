@@ -46,11 +46,11 @@ export type Transaction<Row> = {
 }
 
 export type SheetStore<Row> = {
-  getRows(): readonly Row[]
+  getRows(this: void): readonly Row[]
   /** The same object until undo or redo availability changes. */
-  getHistory(): HistoryState
+  getHistory(this: void): HistoryState
   /** Called after the rows or the history change. Returns an unsubscribe. */
-  subscribe(listener: () => void): () => void
+  subscribe(this: void, listener: () => void): () => void
   /** The row's position, or -1. */
   indexOf(rowId: string): number
   getRow(rowId: string): Row | undefined

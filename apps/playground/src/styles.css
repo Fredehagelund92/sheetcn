@@ -1,0 +1,419 @@
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+  --border: oklch(0.922 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  /* Selection outline, tint and active cell. */
+  --accent: oklch(0.546 0.215 262.9);
+  /* Opaque, because the header and the row gutter are sticky. */
+  --header: color-mix(in oklab, var(--muted) 55%, var(--background));
+  --header-selected: color-mix(in oklab, var(--accent) 14%, var(--header));
+  --tint: color-mix(in oklab, var(--accent) 8%, var(--background));
+  --chip: oklch(0.95 0 0);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.74 0 0);
+    --border: oklch(0.3 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --accent: oklch(0.707 0.165 254.6);
+    --chip: oklch(0.28 0 0);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font:
+    14px/1.4 system-ui,
+    sans-serif;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--muted);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.address {
+  min-width: 112px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--muted);
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+}
+
+.hint {
+  margin-left: 8px;
+}
+
+@media (max-width: 720px) {
+  .hint {
+    display: none;
+  }
+}
+
+.grid-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 30px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.status .notice {
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status .measure {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.status .count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Grid ------------------------------------------------------------------ */
+
+.grid-scroll {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  contain: strict;
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: 13px;
+}
+
+.grid-scroll:focus {
+  outline: none;
+}
+
+.grid-canvas {
+  position: relative;
+}
+
+.grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 34px;
+}
+
+.grid-row-head,
+.grid-row {
+  display: flex;
+}
+
+.grid-row-head {
+  height: 100%;
+}
+
+.grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 32px;
+}
+
+.grid-row.editing {
+  z-index: 2;
+}
+
+.corner,
+.head-cell,
+.gutter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  background: var(--header);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.head-cell {
+  position: relative;
+  gap: 6px;
+  padding: 0 8px;
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.head-cell.pinned {
+  position: sticky;
+  z-index: 1;
+}
+
+.head-cell.selected,
+.gutter.selected {
+  background: var(--header-selected);
+  color: var(--foreground);
+}
+
+.head-cell .letter {
+  flex: none;
+  width: 16px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.head-cell .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head-cell.numeric .title {
+  margin-left: auto;
+}
+
+.resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize:hover {
+  background: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.resize.resizing {
+  background: var(--accent);
+}
+
+.gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  justify-content: flex-end;
+  padding: 0 8px;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.cell {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--background);
+}
+
+.cell:focus {
+  outline: none;
+}
+
+.cell.pinned {
+  position: sticky;
+  z-index: 1;
+}
+
+.pinned-last {
+  border-right-width: 2px;
+}
+
+.cell.numeric {
+  justify-content: flex-end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell.read-only {
+  color: var(--muted-foreground);
+}
+
+.cell.selected {
+  background: var(--tint);
+}
+
+.cell .text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.check {
+  margin: 0 auto;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.check.on {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.flag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 7px solid var(--destructive);
+  border-left: 7px solid transparent;
+}
+
+.active-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  padding: 0 7px;
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  text-align: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.editor:focus {
+  outline: none;
+}
+
+.editor.invalid {
+  box-shadow: inset 0 0 0 2px var(--destructive);
+}
+
+.editor-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 3;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--destructive);
+  color: oklch(0.985 0 0);
+  font-size: 12px;
+  white-space: nowrap;
+}

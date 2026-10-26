@@ -3,6 +3,8 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/core/test" },
-    { "path": "packages/react" }
+    { "path": "packages/react" },
+    { "path": "packages/react/test" },
+    { "path": "apps/playground" }
   ]
 }

@@ -6,18 +6,23 @@ A customizable spreadsheet and data-table component for React and shadcn/ui. MIT
 
 Early work. Nothing is published to npm yet, and there is no component to install.
 
-What exists today is the headless core, `@sheetcn/core`: the column schema, cell values (parse, format, validate) and a row store with transactions and undo. `@sheetcn/react` is an empty placeholder.
+What exists today:
 
-Not built yet: clipboard and paste planning, fill, selection and the keyboard map, the React binding, the shadcn registry with the grid views, and the docs.
+- The headless core, `@sheetcn/core`: the column schema, cell values (parse, format, validate), a row store with transactions and undo, selection geometry and the keyboard map.
+- The groundwork of the React binding, `@sheetcn/react`: `useSheet` wires the store to TanStack Table cell selection and TanStack Virtual, with keyboard commands, editing state and pointer selection.
+- A playground app that shows the binding at 100,000 rows and measures commits.
+
+Not built yet: clipboard and paste planning, fill, the shadcn registry with the grid views, and the docs.
 
 The plan: one headless core and a React binding on npm, with the grid markup and styles installed from a shadcn registry, in two presets (`table` and `sheet`).
 
 ## Packages
 
-| Package          | What it is                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------- |
-| `packages/core`  | `@sheetcn/core`. Plain TypeScript: schema, values, store and history. No React, no DOM, no TanStack.      |
-| `packages/react` | `@sheetcn/react`. Placeholder for the React binding (TanStack Table and Virtual wiring, focus, keyboard). |
+| Package           | What it is                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`   | `@sheetcn/core`. Plain TypeScript: schema, values, store and history, selection geometry, keyboard map. No React, no DOM.  |
+| `packages/react`  | `@sheetcn/react`. The React binding: `useSheet` (TanStack Table and Virtual wiring), keyboard, editing, pointer and focus. |
+| `apps/playground` | A Vite app (not published): a minimal grid on the binding at 100,000 rows by 20 columns, with a measurement harness.       |
 
 A lint rule keeps React, TanStack and browser globals out of the core, and its TypeScript config has no DOM types.
 
@@ -102,6 +107,39 @@ store.undo()
   // and on each render: store.setRows(data)
   ```
 
+### Selection and the keyboard map
+
+- A selection is a list of `CellRange`s: two corners by row and column id (`anchorRowId`, `anchorColumnId`, `focusRowId`, `focusColumnId`), plus an optional `"exclude"` operation. The anchor of the last range is the active cell. The shape is TanStack Table's, so either side can hold the selection.
+- `resolveRanges` turns the ranges into disjoint `CellRect`s of display indexes; `cellEdges` gives the outline of a cell; `rowSelectionKey` gives one string per row for what the selection draws on it, so a row re-renders only when that changes.
+- `navigate` moves an active range by position: move, extend (Shift), jump to the edge of the data (Ctrl or Cmd + arrow, stopping at filled and blank cells as spreadsheets do), page, row and grid ends, select rows, columns or all, collapse.
+- `keyToCommand(event, context)` maps a key press to a `SheetCommand`, or null when the key belongs to the browser or the editor. Ctrl and Cmd are both the shortcut modifier. The conventions:
+  - Enter edits the active cell, keeping its value. While editing, Enter commits and moves down, Shift+Enter up, Tab right and Shift+Tab left.
+  - Typing a character starts an edit that replaces the value. In that mode the arrow keys commit and move; in an edit started with Enter, F2 or a double click they move the caret. F2 switches between the two.
+  - Escape cancels an edit, then a cut that waits for a paste (nothing is cleared), then collapses the selection to the active cell.
+  - Space and Enter toggle a boolean cell; other typed keys do nothing there. Delete and Backspace clear the selection. Ctrl or Cmd + Z undoes; with Shift, or Ctrl or Cmd + Y, it redoes.
+  - Copy, cut and paste are not keys here: the binding will read them from clipboard events.
+
+## The React binding in short
+
+```tsx
+import { useSheet, useSheetPointer } from "@sheetcn/react"
+
+const sheet = useSheet<Item>({ columns, getRowId, defaultData: rows })
+// or controlled: useSheet({ columns, getRowId, data, onChange })
+const { onPointerDown, onMouseDown } = useSheetPointer(sheet)
+
+<div role="grid" tabIndex={-1} onPointerDown={onPointerDown} onMouseDown={onMouseDown}
+  onKeyDown={(e) => sheet.handleKeyDown(e.nativeEvent, { pageRows, pageColumns })}>
+  ...
+</div>
+```
+
+- `useSheet` returns one stable `Sheet` for the life of the component. It owns the core store (or wraps controlled `data`), a TanStack table with cell selection, sizing, resizing and pinning (`pin: "start"` columns first), and the editing state. The hook re-renders for data and column layout only, never for selection; views subscribe per row with `useRowSelectionKey`, and to the rest with `useSheetSelection`, `useSheetState` and `useSheetHistory`.
+- Commits stay cheap at 100,000 rows: `createSheetCoreRowModel` replaces TanStack's core row model and builds new `Row` objects only for the rows a change replaced. A Vitest test checks that a one-cell commit through `useSheet` at 100,000 rows builds exactly one new `Row` and reuses all the others. The timing is gated in the playground, not in Vitest.
+- `useSheetPointer` selects with pointer events (mouse, pen and touch), not TanStack's mouse-only handlers. It drags with edge scrolling, extends with Shift, adds or removes ranges with Ctrl or Cmd, selects whole rows and columns from the headers, and keeps DOM focus on the active cell. It finds cells by `data-row-index` and `data-column-index` attributes.
+- `useSheetRowVirtualizer` keeps the virtualizer's item keys stable across edits, so a commit does not make it recompute every row offset, and keeps the active row mounted while it is scrolled away.
+- Contract tests (`packages/react/test/tanstack-contract.test.ts`) pin the TanStack Table 9.3 behaviour the binding relies on: selection bounds, `autoResetCellSelection`, the step rules of its own arrow-key moves, and that the binding never calls `getSelectedCellRangesData` (it builds a cell object per selected cell) or the mouse-only handlers.
+
 ## Development
 
 Requires Node 24 or later and pnpm (the version is pinned in `package.json`). Dependencies are pinned to exact versions.
@@ -110,9 +148,18 @@ Requires Node 24 or later and pnpm (the version is pinned in `package.json`). De
 pnpm install
 pnpm typecheck        # tsc -b over every package and the tests
 pnpm lint             # ESLint, Prettier and a text check
-pnpm test             # Vitest, including the property tests and the commit gate
+pnpm test             # Vitest, including the property tests and the row reuse test
 pnpm build            # emits packages/*/dist
 pnpm check:licenses   # license scan; see THIRD_PARTY_NOTICES.md
 ```
 
 CI runs all five on every pull request.
+
+### The playground
+
+```sh
+pnpm --filter @sheetcn/playground dev      # http://localhost:5173, ?rows=1000 for fewer rows
+pnpm --filter @sheetcn/playground build && pnpm --filter @sheetcn/playground preview
+```
+
+Measure on the production build. "Measure commit" (or `__playground.measureCommits(50)` in the console) commits one cell 50 times from an open editor and reports the time from each commit to the frame that shows it. Each commit starts at the beginning of a frame, so the number is the work (commit, render, style, layout and paint) without the wait for the next frame. `measureCommits(50, { enter: true })` dispatches Enter on the editor instead, so it also moves the selection and focus. The gate: under 5 ms at 100,000 rows, and under 25 ms with the CPU slowed 4 times in the browser's developer tools.
