@@ -1,5 +1,5 @@
-// Fails when a file in the repository contains an em dash. The project writes
-// a plain dash instead.
+// Fails when a text file in the repository contains an em dash. The project
+// writes a plain dash instead.
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 
@@ -20,6 +20,7 @@ for (const file of files) {
   } catch {
     continue // listed but deleted from the working tree
   }
+  if (text.includes("\0")) continue // binary, such as an image
   text.split("\n").forEach((line, i) => {
     if (line.includes(EM_DASH)) found.push(`${file}:${i + 1}`)
   })
