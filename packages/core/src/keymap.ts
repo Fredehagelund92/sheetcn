@@ -32,6 +32,8 @@ export type SheetCommand =
   | { type: "cancelEdit" }
   /** Flips a boolean cell, which has no editor. */
   | { type: "toggle" }
+  /** A key the sheet swallows without doing anything (typing on a boolean cell). */
+  | { type: "ignore" }
   /** Empties the selected cells. */
   | { type: "clear" }
   | { type: "undo" }
@@ -120,12 +122,13 @@ function editingKey(e: KeyInput, mode: EditMode): SheetCommand | null {
 }
 
 function gridKey(e: KeyInput, context: KeyContext): SheetCommand | null {
+  const boolean = context.activeColumnType === "boolean"
   if (e.isComposing || e.key === "Process" || e.key === "Dead") {
+    if (boolean) return { type: "ignore" }
     return { type: "startEdit", mode: "replace", text: "", composing: true }
   }
   const mod = e.metaKey || e.ctrlKey
   const extend = e.shiftKey
-  const boolean = context.activeColumnType === "boolean"
 
   const direction = ARROWS[e.key]
   if (direction) {
@@ -190,6 +193,9 @@ function gridKey(e: KeyInput, context: KeyContext): SheetCommand | null {
     return null
   }
 
-  if (isTyping(e)) return { type: "startEdit", mode: "replace", text: e.key }
+  if (isTyping(e)) {
+    if (boolean) return { type: "ignore" }
+    return { type: "startEdit", mode: "replace", text: e.key }
+  }
   return null
 }

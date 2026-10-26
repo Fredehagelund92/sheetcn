@@ -198,6 +198,22 @@ describe("boolean cells", () => {
     expect(cmd("F2", boolean)).toBeNull()
     expect(cmd("Shift+Space", boolean)).toEqual({ type: "selectRows" })
   })
+
+  it("swallow typed text and composition without editing", () => {
+    for (const k of ["a", "7", "é"]) {
+      expect(cmd(k, boolean)).toEqual({ type: "ignore" })
+    }
+    expect(cmd("Dead", boolean)).toEqual({ type: "ignore" })
+    expect(cmd("Process", boolean)).toEqual({ type: "ignore" })
+    expect(keyToCommand({ ...press("a"), isComposing: true }, boolean)).toEqual(
+      { type: "ignore" }
+    )
+  })
+
+  it("leave shortcuts alone", () => {
+    expect(cmd("Mod+q", boolean)).toBeNull()
+    expect(cmd("Mod+z", boolean)).toEqual({ type: "undo" })
+  })
 })
 
 describe("Escape and a pending cut", () => {

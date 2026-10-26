@@ -116,7 +116,7 @@ store.undo()
   - Enter edits the active cell, keeping its value. While editing, Enter commits and moves down, Shift+Enter up, Tab right and Shift+Tab left.
   - Typing a character starts an edit that replaces the value. In that mode the arrow keys commit and move; in an edit started with Enter, F2 or a double click they move the caret. F2 switches between the two.
   - Escape cancels an edit, then a cut that waits for a paste (nothing is cleared), then collapses the selection to the active cell.
-  - Space and Enter toggle a boolean cell. Delete and Backspace clear the selection. Ctrl or Cmd + Z undoes; with Shift, or Ctrl or Cmd + Y, it redoes.
+  - Space and Enter toggle a boolean cell; other typed keys do nothing there. Delete and Backspace clear the selection. Ctrl or Cmd + Z undoes; with Shift, or Ctrl or Cmd + Y, it redoes.
   - Copy, cut and paste are not keys here: the binding will read them from clipboard events.
 
 ## The React binding in short
@@ -135,7 +135,7 @@ const { onPointerDown, onMouseDown } = useSheetPointer(sheet)
 ```
 
 - `useSheet` returns one stable `Sheet` for the life of the component. It owns the core store (or wraps controlled `data`), a TanStack table with cell selection, sizing, resizing and pinning (`pin: "start"` columns first), and the editing state. The hook re-renders for data and column layout only, never for selection; views subscribe per row with `useRowSelectionKey`, and to the rest with `useSheetSelection`, `useSheetState` and `useSheetHistory`.
-- Commits stay cheap at 100,000 rows: `createSheetCoreRowModel` replaces TanStack's core row model and builds new `Row` objects only for the rows a change replaced. A Vitest gate checks that a one-cell commit through `useSheet` takes under 3 ms (median) and a tenth or less of TanStack's own row model.
+- Commits stay cheap at 100,000 rows: `createSheetCoreRowModel` replaces TanStack's core row model and builds new `Row` objects only for the rows a change replaced. A Vitest test checks that a one-cell commit through `useSheet` at 100,000 rows builds exactly one new `Row` and reuses all the others. The timing is gated in the playground, not in Vitest.
 - `useSheetPointer` selects with pointer events (mouse, pen and touch), not TanStack's mouse-only handlers. It drags with edge scrolling, extends with Shift, adds or removes ranges with Ctrl or Cmd, selects whole rows and columns from the headers, and keeps DOM focus on the active cell. It finds cells by `data-row-index` and `data-column-index` attributes.
 - `useSheetRowVirtualizer` keeps the virtualizer's item keys stable across edits, so a commit does not make it recompute every row offset, and keeps the active row mounted while it is scrolled away.
 - Contract tests (`packages/react/test/tanstack-contract.test.ts`) pin the TanStack Table 9.3 behaviour the binding relies on: selection bounds, `autoResetCellSelection`, the step rules of its own arrow-key moves, and that the binding never calls `getSelectedCellRangesData` (it builds a cell object per selected cell) or the mouse-only handlers.
@@ -148,7 +148,7 @@ Requires Node 24 or later and pnpm (the version is pinned in `package.json`). De
 pnpm install
 pnpm typecheck        # tsc -b over every package and the tests
 pnpm lint             # ESLint, Prettier and a text check
-pnpm test             # Vitest, including the property tests and the commit gate
+pnpm test             # Vitest, including the property tests and the row reuse test
 pnpm build            # emits packages/*/dist
 pnpm check:licenses   # license scan; see THIRD_PARTY_NOTICES.md
 ```

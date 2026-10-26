@@ -1,18 +1,10 @@
 // @vitest-environment jsdom
-// Gate: a one-cell commit on 100,000 rows by 20 columns, through useSheet and
-// the TanStack row model, takes under 3 ms (median). It covers the store
-// commit, the React render of the hook and the reads a grid makes after it:
-// the row model, the display order and the selection bounds. The browser
-// gate (commit to paint) is measured in the playground.
+// A one-cell commit on 100,000 rows by 20 columns, through useSheet and the
+// TanStack row model, builds exactly one new Row and reuses all the others.
+// That is what keeps the commit O(changed rows). The timing is logged, not
+// asserted: the commit to paint gate (5 ms, 25 ms at 4x CPU) is measured in
+// the browser, in the playground.
 import { defineColumns, type Column } from "@sheetcn/core"
-import {
-  cellSelectionFeature,
-  columnPinningFeature,
-  columnResizingFeature,
-  columnSizingFeature,
-  tableFeatures,
-  useTable,
-} from "@tanstack/react-table"
 import { describe, expect, it } from "vitest"
 
 import { useSheet } from "../src/index.js"
@@ -22,8 +14,6 @@ type Row = { id: string } & Record<`c${number}`, number | null>
 
 const ROWS = 100_000
 const COLUMNS = 20
-const BUDGET_MS = 3
-const RUNS = 200
 
 const columns: Column<Row>[] = defineColumns<Row>((c) =>
   Array.from({ length: COLUMNS }, (_, j) => c.number(`c${j}`))
@@ -38,92 +28,35 @@ function makeRows(): Row[] {
   })
 }
 
-let seed = 7
-const pick = (n: number) => {
-  seed = (seed * 48271) % 2147483647
-  return seed % n
-}
-
-function measure(commit: (i: number) => void, runs = RUNS) {
-  for (let i = 0; i < 20; i++) commit(i)
-  const times: number[] = []
-  for (let i = 0; i < runs; i++) {
-    const start = performance.now()
-    commit(i)
-    times.push(performance.now() - start)
-  }
-  times.sort((a, b) => a - b)
-  const at = (q: number) => times[Math.floor(q * (times.length - 1))] as number
-  return { median: at(0.5), p95: at(0.95) }
-}
-
-function measureSheet() {
-  const rows = makeRows()
-  const { result, unmount } = renderHook(
-    () => useSheet<Row>({ columns, getRowId, defaultData: rows }),
-    undefined
-  )
-  const sheet = () => result.current
-  const times = measure((i) => {
-    inAct(() => {
-      sheet().store.transaction("edit", (tx) =>
-        tx.set(`r${pick(ROWS)}`, `c${pick(COLUMNS)}`, -i)
-      )
-    })
-    sheet().getRows()
-    sheet().getSelectionRects()
-  })
-  unmount()
-  return times
-}
-
-// The same table with TanStack's default core row model, its data swapped
-// one row at a time as the store does.
-function measureStock() {
-  const features = tableFeatures({
-    cellSelectionFeature,
-    columnSizingFeature,
-    columnResizingFeature,
-    columnPinningFeature,
-  })
-  let data = makeRows()
-  const defs = columns.map((c) => ({
-    id: c.id,
-    accessorFn: (row: Row) => row[c.id as `c${number}`],
-  }))
-  const r = renderHook(
-    (d: Row[]) =>
-      useTable({
-        features,
-        columns: defs,
-        data: d,
-        getRowId,
-        autoResetCellSelection: false,
-      }),
-    data
-  )
-  const times = measure((i) => {
-    const next = data.slice()
-    const k = pick(ROWS)
-    next[k] = { ...(data[k] as Row), c0: -i }
-    data = next
-    r.rerender(data)
-    r.result.current.getRowsInDisplayOrder()
-    r.result.current.getCellSelectionBounds()
-  }, 20)
-  r.unmount()
-  return times
-}
-
 describe(`one-cell commit through useSheet on ${ROWS.toLocaleString("en")} rows`, () => {
-  it(`takes under ${BUDGET_MS} ms, a tenth or less of TanStack's own row model`, () => {
-    const ours = measureSheet()
-    const stock = measureStock()
-    console.log(
-      `useSheet: median ${ours.median.toFixed(3)} ms, p95 ${ours.p95.toFixed(3)} ms; ` +
-        `TanStack core row model: median ${stock.median.toFixed(3)} ms`
+  it("builds one new Row and reuses all the others", () => {
+    const { result, unmount } = renderHook(
+      () => useSheet<Row>({ columns, getRowId, defaultData: makeRows() }),
+      undefined
     )
-    expect(ours.median).toBeLessThan(BUDGET_MS)
-    expect(ours.median * 10).toBeLessThan(stock.median)
+    const sheet = () => result.current
+    const before = sheet().getRows().slice()
+    const byId = sheet().table.getRowModel().rowsById
+    expect(before).toHaveLength(ROWS)
+
+    const start = performance.now()
+    inAct(() => {
+      sheet().store.transaction("edit", (tx) => tx.set("r54321", "c3", -1))
+    })
+    const after = sheet().getRows()
+    sheet().getSelectionRects()
+    const elapsed = performance.now() - start
+    console.log(`useSheet one-cell commit: ${elapsed.toFixed(3)} ms`)
+
+    expect(after).toHaveLength(ROWS)
+    const replaced: number[] = []
+    for (let i = 0; i < ROWS; i++) {
+      if (after[i] !== before[i]) replaced.push(i)
+    }
+    expect(replaced).toEqual([54321])
+    expect(after[54321]?.original.c3).toBe(-1)
+    expect(sheet().table.getRowModel().rowsById).toBe(byId)
+    expect(byId.r54321).toBe(after[54321])
+    unmount()
   }, 60_000)
 })

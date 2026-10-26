@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 // The TanStack Table 9.3.x behaviour that @sheetcn/react relies on, pinned.
 // When an upgrade breaks one of these, read the binding before moving the pin.
-import { readdirSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
-import { join } from "node:path"
 
 import {
   navigate,
@@ -296,22 +294,6 @@ describe("getSelectedCellRangesData", () => {
     inAct(() => result.current.selectAllCells())
     const [grid] = result.current.getSelectedCellRangesData()
     expect(grid?.flat()).toHaveLength(6 * COLUMNS)
-  })
-
-  it("is never called by the binding, and neither are the mouse-only handlers", () => {
-    const dir = join(import.meta.dirname, "../src")
-    const banned = [
-      "getSelectedCellRangesData",
-      "getSelectedCellIds",
-      "getSelectionStartHandler",
-      "getSelectionExtendHandler",
-    ]
-    for (const file of readdirSync(dir)) {
-      const text = readFileSync(join(dir, file), "utf8")
-      for (const name of banned) {
-        expect(text.includes(name), `${file} uses ${name}`).toBe(false)
-      }
-    }
   })
 })
 

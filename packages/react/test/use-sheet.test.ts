@@ -216,6 +216,23 @@ describe("editing", () => {
     expect(sheet().getState().editing).toBeNull()
   })
 
+  it("ignores typing and composition on a boolean cell", () => {
+    const { key, sheet, value } = setup()
+    key("ArrowRight")
+    key("ArrowRight")
+    for (const k of ["a", "7", "Dead", "Process"]) {
+      const { command, event } = key(k)
+      expect(command).toEqual({ type: "ignore" })
+      expect(event.preventDefault).toHaveBeenCalled()
+      expect(value("r0", "done")).toBe(false)
+      expect(sheet().getState().editing).toBeNull()
+    }
+    key(" ")
+    expect(value("r0", "done")).toBe(true)
+    key("Enter")
+    expect(value("r0", "done")).toBe(false)
+  })
+
   it("refuses read-only cells with a notice", () => {
     const { key, sheet } = setup()
     key("End")

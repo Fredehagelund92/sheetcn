@@ -343,6 +343,8 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
       case "redo":
         this.redo()
         return true
+      case "ignore":
+        return false
       case "cancelCut":
         // Cut and paste arrive with the clipboard work; nothing is pending yet.
         return false

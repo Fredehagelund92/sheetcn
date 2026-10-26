@@ -266,4 +266,48 @@ describe("useSheetPointer", () => {
     expect(sheet.store.getValue("r0", "a")).toBe(42)
     expect(p.active()).toEqual({ anchor: at(5, 2), focus: at(5, 2) })
   })
+
+  it("never reads the selected cells or uses TanStack's mouse handlers", () => {
+    // These build a Cell per selected cell (hundreds of MB at millions of
+    // cells) or duplicate what the binding does.
+    const p = setup()
+    const { sheet } = p.result.current
+    const table = sheet.table as unknown as Record<string, unknown>
+    const names = [
+      "getSelectedCellRangesData",
+      "getSelectedCellIds",
+      "getSelectionStartHandler",
+      "getSelectionExtendHandler",
+    ]
+    const spies = names.map((name) => {
+      expect(typeof table[name]).toBe("function")
+      return vi.spyOn(table as Record<string, () => unknown>, name)
+    })
+    p.down(5, 5)
+    p.fire("pointermove", 25, 55)
+    p.fire("pointerup", 25, 55)
+    p.down(15, 15, { ctrlKey: true })
+    p.fire("pointerup", 15, 15)
+    const keys = (k: string, mods = {}) =>
+      inAct(() => {
+        sheet.handleKeyDown(
+          {
+            key: k,
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            altKey: false,
+            ...mods,
+            preventDefault: () => undefined,
+          },
+          { pageRows: 3, pageColumns: 2 }
+        )
+      })
+    keys("ArrowDown", { shiftKey: true })
+    keys("a", { ctrlKey: true })
+    keys("Escape")
+    keys("Delete")
+    inAct(() => sheet.select({ anchor: at(0, 0), focus: at(9, 2) }))
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+  })
 })
