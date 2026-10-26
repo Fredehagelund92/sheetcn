@@ -88,7 +88,8 @@ export type Sheet<Row extends RowData> = {
   getSelectionRects(this: void): readonly CellRect[]
   /** The last range by position; its anchor is the active cell. */
   getActiveRange(this: void): ActiveRange | null
-  select(this: void, range: ActiveRange, mode?: SelectMode): void
+  /** Selects a range given by ids, or by position. */
+  select(this: void, range: CellRange | ActiveRange, mode?: SelectMode): void
   isSelected(this: void, cell: CellIndex): boolean
 
   getState(this: void): SheetState
@@ -231,19 +232,29 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   isSelected = (cell: CellIndex) =>
     rectsContain(this.getSelectionRects(), cell.rowIndex, cell.columnIndex)
 
-  select = (active: ActiveRange, mode: SelectMode = "replace") => {
-    const { rowCount, columnCount } = this.#size()
-    const inside = (c: CellIndex) =>
-      c.rowIndex >= 0 &&
-      c.rowIndex < rowCount &&
-      c.columnIndex >= 0 &&
-      c.columnIndex < columnCount
-    if (!inside(active.anchor) || !inside(active.focus)) return
-    const range: CellRange = {
-      anchorRowId: this.#rowIdAt(active.anchor.rowIndex),
-      anchorColumnId: this.#columnIdAt(active.anchor.columnIndex),
-      focusRowId: this.#rowIdAt(active.focus.rowIndex),
-      focusColumnId: this.#columnIdAt(active.focus.columnIndex),
+  select = (target: CellRange | ActiveRange, mode: SelectMode = "replace") => {
+    let range: CellRange
+    if ("anchorRowId" in target) {
+      range = {
+        anchorRowId: target.anchorRowId,
+        anchorColumnId: target.anchorColumnId,
+        focusRowId: target.focusRowId,
+        focusColumnId: target.focusColumnId,
+      }
+    } else {
+      const { rowCount, columnCount } = this.#size()
+      const inside = (c: CellIndex) =>
+        c.rowIndex >= 0 &&
+        c.rowIndex < rowCount &&
+        c.columnIndex >= 0 &&
+        c.columnIndex < columnCount
+      if (!inside(target.anchor) || !inside(target.focus)) return
+      range = {
+        anchorRowId: this.#rowIdAt(target.anchor.rowIndex),
+        anchorColumnId: this.#columnIdAt(target.anchor.columnIndex),
+        focusRowId: this.#rowIdAt(target.focus.rowIndex),
+        focusColumnId: this.#columnIdAt(target.focus.columnIndex),
+      }
     }
     if (mode === "exclude") range.operation = "exclude"
     this.table.setCellSelection((old) => {
@@ -404,6 +415,11 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     if (!editing) return true
     const column = this.getColumn(editing.columnId)
     if (!column) {
+      this.#setState({ editing: null })
+      return true
+    }
+    if (this.store.getRow(editing.rowId) === undefined) {
+      // The row went away while it was being edited.
       this.#setState({ editing: null })
       return true
     }

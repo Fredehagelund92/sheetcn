@@ -244,6 +244,29 @@ describe("clear, undo and redo", () => {
   })
 })
 
+describe("select", () => {
+  it("takes a range by ids or by position, and combines ranges by mode", () => {
+    const { sheet, active } = setup()
+    inAct(() =>
+      sheet().select({
+        anchorRowId: "r1",
+        anchorColumnId: "price",
+        focusRowId: "r3",
+        focusColumnId: "done",
+      })
+    )
+    expect(active()).toEqual({ anchor: at(1, 1), focus: at(3, 2) })
+    inAct(() => sheet().select(one(0, 0), "add"))
+    expect(sheet().getSelection()).toHaveLength(2)
+    inAct(() => sheet().select(one(2, 2), "exclude"))
+    expect(sheet().isSelected(at(2, 2))).toBe(false)
+    expect(sheet().isSelected(at(2, 1))).toBe(true)
+    // A position outside the grid is ignored.
+    inAct(() => sheet().select(one(99, 0)))
+    expect(sheet().getSelection()).toHaveLength(3)
+  })
+})
+
 describe("controlled data and selection", () => {
   it("never changes controlled rows; the app applies each change", () => {
     let data = make(3)
@@ -259,9 +282,27 @@ describe("controlled data and selection", () => {
     expect(changes).toHaveLength(1)
     // Not applied until the app renders the new rows.
     expect(r.sheet().getRows()).toBe(before)
+    const renders = r.result.renders
     r.rerender({ columns, getRowId, data, onChange })
+    expect(r.result.renders).toBe(renders + 1)
     expect(r.value("r0", "name")).toBe("x")
     expect(r.sheet().getRows()[0]?.original.name).toBe("x")
+  })
+
+  it("drops an edit whose row went away", () => {
+    const onChange = vi.fn()
+    const r = setup({ data: make(3), onChange })
+    r.key("ArrowDown")
+    r.key("x")
+    r.rerender({
+      columns,
+      getRowId,
+      data: make(3).filter((row) => row.id !== "r1"),
+      onChange,
+    })
+    r.key("Enter")
+    expect(r.sheet().getState().editing).toBeNull()
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it("reports selection changes and follows a controlled selection", () => {

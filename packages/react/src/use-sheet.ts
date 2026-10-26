@@ -45,6 +45,9 @@ export type UseSheetOptions<Row extends RowData> = {
   historyLimit?: number
 }
 
+const noSubscription = () => () => {}
+const noRows = () => null
+
 const DEFAULT_WIDTH = 120
 const DEFAULT_MIN_WIDTH = 48
 
@@ -94,8 +97,13 @@ export function useSheet<Row extends RowData>(
     setState({ columns: options.columns, store })
   }
 
-  const ownRows = useSyncExternalStore(store.subscribe, store.getRows)
-  const rows = controlled ? (options.data as readonly Row[]) : ownRows
+  // Controlled rows come from props; the store follows them and must not
+  // render the host a second time.
+  const ownRows = useSyncExternalStore(
+    controlled ? noSubscription : store.subscribe,
+    controlled ? noRows : store.getRows
+  )
+  const rows = (controlled ? options.data : ownRows) as readonly Row[]
   useLayoutEffect(() => {
     if (controlled) store.setRows(rows)
   }, [controlled, store, rows])
