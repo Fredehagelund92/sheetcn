@@ -2,6 +2,7 @@ import js from "@eslint/js"
 import prettier from "eslint-config-prettier"
 import { defineConfig, globalIgnores } from "eslint/config"
 import globals from "globals"
+import reactHooks from "eslint-plugin-react-hooks"
 import tseslint from "typescript-eslint"
 
 // Names that only exist in a browser. The core must run anywhere.
@@ -75,7 +76,11 @@ export default defineConfig([
     },
   },
   {
-    files: ["packages/*/test/**/*.ts"],
+    files: ["packages/react/**/*.{ts,tsx}", "apps/**/*.{ts,tsx}"],
+    extends: [reactHooks.configs.flat.recommended],
+  },
+  {
+    files: ["packages/*/test/**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-non-null-assertion": "off",
     },
