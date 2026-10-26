@@ -12,8 +12,9 @@ const fail = (error: string): ParseResult<never> => ({ ok: false, error })
 
 // A plain number, or one grouped with commas in threes ("1,234,567.5").
 // The exponent is only allowed on plain numbers, as String(n) writes it.
+// Each part can match a string in only one way, so the time stays linear.
 const NUMBER =
-  /^([+-]?)([$€£]?)([+-]?)(?:(\d{1,3}(?:,\d{3})+)(\.\d*)?|(\d+\.?\d*|\.\d+)(?:[eE]([+-]?\d+))?)$/
+  /^([+-]?)([$€£]?)([+-]?)(?:(\d{1,3}(?:,\d{3})+)(\.\d*)?|(\d+(?:\.\d*)?|\.\d+)(?:[eE]([+-]?\d+))?)$/
 
 /**
  * Parses number text as spreadsheets copy it: "1234.5", "-12", "1e21",

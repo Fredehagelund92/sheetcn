@@ -77,6 +77,13 @@ describe("number", () => {
     expect(parseNumber("1.234.567").ok).toBe(false)
   })
 
+  it("rejects a long bad number in linear time", () => {
+    const start = performance.now()
+    expect(parseNumber("1".repeat(100_000) + "x").ok).toBe(false)
+    expect(parseNumber("1,234".repeat(20_000) + "x").ok).toBe(false)
+    expect(performance.now() - start).toBeLessThan(100)
+  })
+
   it("rejects a single comma group as ambiguous", () => {
     expect(parseNumber("1,234")).toEqual({
       ok: false,
