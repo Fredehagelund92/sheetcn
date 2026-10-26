@@ -273,15 +273,18 @@ describe("useSheetPointer", () => {
     const p = setup()
     const { sheet } = p.result.current
     const table = sheet.table as unknown as Record<string, unknown>
-    const names = [
-      "getSelectedCellRangesData",
-      "getSelectedCellIds",
-      "getSelectionStartHandler",
-      "getSelectionExtendHandler",
+    const cellProto = Object.getPrototypeOf(
+      sheet.table.getRowModel().rows[0]!.getAllCells()[0]!
+    ) as Record<string, unknown>
+    const targets: [Record<string, unknown>, string][] = [
+      [table, "getSelectedCellRangesData"],
+      [table, "getSelectedCellIds"],
+      [cellProto, "getSelectionStartHandler"],
+      [cellProto, "getSelectionExtendHandler"],
     ]
-    const spies = names.map((name) => {
-      expect(typeof table[name]).toBe("function")
-      return vi.spyOn(table as Record<string, () => unknown>, name)
+    const spies = targets.map(([object, name]) => {
+      expect(typeof object[name]).toBe("function")
+      return vi.spyOn(object as Record<string, () => unknown>, name)
     })
     p.down(5, 5)
     p.fire("pointermove", 25, 55)
