@@ -22,10 +22,12 @@ export {
   useSheetState,
 } from "./hooks.js"
 export {
+  focusActiveCell,
   rangeForTargets,
   targetOfElement,
   useSheetPointer,
   type HitTest,
+  type MouseEventLike,
   type PointerEventLike,
   type PointerTarget,
   type SheetPointerOptions,

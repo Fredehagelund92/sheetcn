@@ -70,7 +70,7 @@ describe("keyToCommand on the grid", () => {
   })
 })
 
-describe("Enter edits, as in Google Sheets", () => {
+describe("Enter edits the active cell", () => {
   it("starts editing with the value kept", () => {
     expect(cmd("Enter")).toEqual({ type: "startEdit", mode: "edit" })
     expect(cmd("F2")).toEqual({ type: "startEdit", mode: "edit" })
@@ -200,7 +200,7 @@ describe("boolean cells", () => {
   })
 })
 
-describe("Escape and a pending cut, as in Excel", () => {
+describe("Escape and a pending cut", () => {
   it("cancels the cut first, without clearing anything", () => {
     expect(cmd("Escape", { editing: null, cutPending: true })).toEqual({
       type: "cancelCut",

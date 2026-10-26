@@ -60,7 +60,40 @@ export type PointerEventLike = {
   shiftKey: boolean
   ctrlKey: boolean
   metaKey: boolean
+  target: EventTarget | null
   currentTarget: EventTarget | null
+}
+
+/** The fields of a DOM mouse event `onMouseDown` reads. */
+export type MouseEventLike = {
+  target: EventTarget | null
+  currentTarget: EventTarget | null
+  preventDefault(): void
+}
+
+// Presses inside these belong to the control (an open editor, say).
+const CONTROLS = "input, textarea, select, [contenteditable]"
+const inControl = (target: EventTarget | null) =>
+  target instanceof Element && target.closest(CONTROLS) !== null
+
+/**
+ * Focuses the active cell's element inside `container`, found by its data
+ * attributes (see `targetOfElement`), or the container itself when the
+ * cell is not rendered. Returns the element focused.
+ */
+export function focusActiveCell<Row extends RowData>(
+  sheet: Sheet<Row>,
+  container: HTMLElement
+): HTMLElement {
+  const active = sheet.getActiveRange()?.anchor
+  const cell = active
+    ? container.querySelector<HTMLElement>(
+        `[data-row-index="${active.rowIndex}"][data-column-index="${active.columnIndex}"]`
+      )
+    : null
+  const element = cell ?? container
+  element.focus({ preventScroll: true })
+  return element
 }
 
 // A touch that moves this far is a scroll, not a tap.
@@ -130,7 +163,10 @@ export function rangeForTargets(
  * - Row headers, column headers and the corner select whole rows, columns or
  *   everything, and drag across headers.
  * A press commits an open editor first and does nothing if the draft does
- * not parse.
+ * not parse; a press inside a form control (the editor) is left to it.
+ *
+ * Bind both handlers to the grid's scroll element: `onMouseDown` keeps DOM
+ * focus on the active cell (see `focusActiveCell`).
  */
 export function useSheetPointer<Row extends RowData>(
   sheet: Sheet<Row>,
@@ -146,10 +182,10 @@ export function useSheetPointer<Row extends RowData>(
   const onPointerDown = useCallback(
     (event: PointerEventLike) => {
       const { hitTest = domHitTest } = optionsRef.current
+      if (event.button !== 0 || inControl(event.target)) return
       const target = hitTest(event.clientX, event.clientY)
       const scroller = event.currentTarget
       if (!target || !(scroller instanceof HTMLElement)) return
-      if (event.button !== 0) return
       stopRef.current?.()
 
       const size = {
@@ -285,5 +321,19 @@ export function useSheetPointer<Row extends RowData>(
     [sheet]
   )
 
-  return { onPointerDown }
+  // A press would move DOM focus to what was pressed (or to the page body,
+  // for a header), and start a text selection. Keep focus on the active
+  // cell instead, so the keyboard keeps working. A mouse press follows the
+  // pointer press, which has already moved the selection.
+  const onMouseDown = useCallback(
+    (event: MouseEventLike) => {
+      const container = event.currentTarget
+      if (inControl(event.target) || !(container instanceof HTMLElement)) return
+      event.preventDefault()
+      focusActiveCell(sheet, container)
+    },
+    [sheet]
+  )
+
+  return { onPointerDown, onMouseDown }
 }

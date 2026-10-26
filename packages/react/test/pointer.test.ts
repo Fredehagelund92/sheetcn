@@ -104,6 +104,8 @@ function setup() {
   })
   scroller.getBoundingClientRect = () => new DOMRect(0, 0, 30, 100)
   scroller.scrollBy = vi.fn()
+  scroller.tabIndex = -1
+  document.body.replaceChildren(scroller)
   const hitTest = (x: number, y: number) =>
     cell(Math.floor(y / 10), Math.floor(x / 10))
   const r = renderHook(() => {
@@ -122,6 +124,7 @@ function setup() {
       pointerType: string
       shiftKey: boolean
       ctrlKey: boolean
+      target: EventTarget
     }> = {}
   ) =>
     inAct(() =>
@@ -134,6 +137,7 @@ function setup() {
         shiftKey: false,
         ctrlKey: false,
         metaKey: false,
+        target: scroller,
         currentTarget: scroller,
         ...init,
       })
@@ -144,9 +148,20 @@ function setup() {
       Object.assign(e, { clientX: x, clientY: y, pointerId: 1 })
       window.dispatchEvent(e)
     })
+  const mouseDown = (target: EventTarget) => {
+    const preventDefault = vi.fn()
+    inAct(() =>
+      r.result.current.onMouseDown({
+        target,
+        currentTarget: scroller,
+        preventDefault,
+      })
+    )
+    return preventDefault
+  }
   const active = () => r.result.current.sheet.getActiveRange()
   const ranges = () => r.result.current.sheet.getSelection()
-  return { ...r, down, fire, active, ranges, scroller }
+  return { ...r, down, fire, mouseDown, active, ranges, scroller }
 }
 
 describe("useSheetPointer", () => {
@@ -208,6 +223,35 @@ describe("useSheetPointer", () => {
     p.down(5, 5, { pointerType: "touch" })
     p.fire("pointercancel", 5, 5)
     expect(p.active()).toEqual({ anchor: at(5, 2), focus: at(5, 2) })
+  })
+
+  it("keeps DOM focus on the active cell after a press, not on what was pressed", () => {
+    const p = setup()
+    const header = document.createElement("div")
+    const cellElement = document.createElement("div")
+    cellElement.dataset.rowIndex = "5"
+    cellElement.dataset.columnIndex = "2"
+    cellElement.tabIndex = -1
+    p.scroller.append(header, cellElement)
+    p.down(25, 55)
+    const prevented = p.mouseDown(header)
+    expect(prevented).toHaveBeenCalled()
+    expect(document.activeElement).toBe(cellElement)
+    // The active cell is not rendered: the grid itself takes focus.
+    p.down(5, 5)
+    p.mouseDown(header)
+    expect(document.activeElement).toBe(p.scroller)
+  })
+
+  it("leaves presses inside a form control (the editor) to the control", () => {
+    const p = setup()
+    const { sheet } = p.result.current
+    const input = document.createElement("input")
+    p.scroller.append(input)
+    inAct(() => sheet.startEdit("replace", "oops"))
+    p.down(25, 55, { target: input })
+    expect(sheet.getState().editing?.error).toBeNull()
+    expect(p.mouseDown(input)).not.toHaveBeenCalled()
   })
 
   it("commits an open editor first, and stays when the draft does not parse", () => {

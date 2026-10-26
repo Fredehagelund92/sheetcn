@@ -71,7 +71,7 @@ const graphemes = new Intl.Segmenter()
 /**
  * True for a key that types one character (named keys such as "Enter" or
  * "F5" are words). Ctrl and Cmd shortcuts are not typing, except Ctrl+Alt,
- * which is how AltGr reports itself on Windows.
+ * which is how some keyboard layouts report AltGr.
  */
 function isTyping(e: KeyInput): boolean {
   const segments = graphemes.segment(e.key)[Symbol.iterator]()

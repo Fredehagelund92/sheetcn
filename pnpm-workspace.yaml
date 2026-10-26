@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - apps/*
 
 # Exact pins: `pnpm add` writes "1.2.3", never "^1.2.3".
 savePrefix: ""
