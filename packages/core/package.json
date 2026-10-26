@@ -1,0 +1,26 @@
+{
+  "name": "@sheetcn/core",
+  "version": "0.0.0",
+  "description": "Headless spreadsheet core for sheetcn: column schema, cell values and a row store with history. No React, no DOM.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fredehagelund92/sheetcn.git",
+    "directory": "packages/core"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  }
+}

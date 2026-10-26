@@ -1,0 +1,29 @@
+{
+  "name": "@sheetcn/react",
+  "version": "0.0.0",
+  "description": "React binding for sheetcn. Placeholder: nothing is exported yet.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fredehagelund92/sheetcn.git",
+    "directory": "packages/react"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@sheetcn/core": "workspace:*"
+  }
+}
