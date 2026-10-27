@@ -89,9 +89,7 @@ export type AnyColumnTypeDef = ColumnTypeDef<
 
 /** The stored value type of a definition. */
 export type TypeValue<D> =
-  D extends ColumnTypeDef<infer V, object, unknown, string, string>
-    ? V
-    : never
+  D extends ColumnTypeDef<infer V, object, unknown, string, string> ? V : never
 
 /** The options type of a definition. */
 export type TypeOptions<D> =
