@@ -93,10 +93,16 @@ export const emailType = defineColumnType({
     {
       id: "domainIs",
       label: "domain is",
+      notLabel: "domain is not",
       operands: 1,
-      test: (value, [domain = ""]) =>
-        value !== null &&
-        fold(value.slice(value.lastIndexOf("@") + 1)) === fold(domain.trim()),
+      compile: ([domain = ""]) => {
+        const d = fold(domain.trim())
+        return ok(
+          (value) =>
+            value !== null &&
+            fold(value.slice(value.lastIndexOf("@") + 1)) === d
+        )
+      },
     },
     emptyFilter(),
   ],
@@ -175,11 +181,15 @@ export const urlType = defineColumnType<string, UrlOptions, PreparedUrl, "url">(
       {
         id: "hostIs",
         label: "host is",
+        notLabel: "host is not",
         operands: 1,
-        test: (value, [host = ""], p) => {
-          if (value === null) return false
-          const url = readUrl(value, p)
-          return typeof url !== "string" && url.hostname === fold(host.trim())
+        compile: ([host = ""], p) => {
+          const h = fold(host.trim())
+          return ok((value) => {
+            if (value === null) return false
+            const url = readUrl(value, p)
+            return typeof url !== "string" && url.hostname === h
+          })
         },
       },
       emptyFilter(),
@@ -243,11 +253,15 @@ export const domainType = defineColumnType<
     {
       id: "is",
       label: "is",
+      notLabel: "is not",
       operands: 1,
       // A domain matches itself and its subdomains.
-      test: (value, [domain = ""]) => {
+      compile: ([domain = ""]) => {
         const d = fold(domain.trim())
-        return value !== null && (value === d || value.endsWith(`.${d}`))
+        const sub = `.${d}`
+        return ok(
+          (value) => value !== null && (value === d || value.endsWith(sub))
+        )
       },
     },
     emptyFilter(),

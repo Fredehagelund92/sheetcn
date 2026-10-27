@@ -1,4 +1,6 @@
+import { handOverRanks } from "./rank-cache.js"
 import { handOverIndex, indexFor } from "./row-index.js"
+import { handOverTextCaches } from "./text-cache.js"
 import type { Change, Column, InsertedRow, Patch } from "./types.js"
 import { handOverValueIndexes } from "./value-index.js"
 
@@ -143,6 +145,10 @@ export function applyChange<Row>(
       patched.add(p)
     }
     handOverIndex(rows, next)
+    handOverTextCaches(rows, next, patched)
+    handOverRanks(rows, next, () =>
+      [...patched].map((p) => [rows[p] as Row, next[p] as Row] as const)
+    )
     handOverValueIndexes(rows, next, () =>
       [...patched].map((p) => [rows[p], next[p]] as const)
     )
@@ -198,6 +204,8 @@ export function applyChange<Row>(
   })
   const index = handOverIndex(rows, next, stale)
   for (const id of removed.keys()) index.positions.delete(id)
+  handOverTextCaches(rows, next, null)
+  handOverRanks(rows, next, null)
   return next
 }
 

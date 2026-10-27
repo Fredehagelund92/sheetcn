@@ -266,6 +266,9 @@ describe("identifier uniqueness", () => {
         i % 5 === 0 ? "DUP" : `S${i}`
       )
     )
+    // Builds the value index, one pass that does not depend on the repeats,
+    // so the time below is the checks alone.
+    validateCell(column, "S1", data[1]!, data)
     const started = performance.now()
     const found = data
       .slice(0, 50)

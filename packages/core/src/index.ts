@@ -15,12 +15,16 @@ export type {
 export {
   defineColumnType,
   type AnyColumnTypeDef,
+  type CellTest,
   type ColumnTypeDef,
   type EditHint,
+  type FilterEnv,
   type FilterOp,
+  type TextFilterOp,
   type TypeGroup,
   type TypeOptions,
   type TypeValue,
+  type ValueFilterOp,
 } from "./type-def.js"
 export {
   booleanType,
@@ -50,6 +54,46 @@ export {
 } from "./column-types/numeric.js"
 export { phoneShapeType } from "./column-types/phone.js"
 export { countryType, type CountryOptions } from "./column-types/country.js"
+export {
+  anyOfFilter,
+  containsFilter,
+  emptyFilter,
+  fold as foldText,
+  isTextFilter,
+  orderFilters,
+  startsWithFilter,
+  type OperandReader,
+} from "./column-types/shared.js"
+export {
+  DATE_PERIODS,
+  readDateOperand,
+  relativeDateFilters,
+  type DatePeriod,
+} from "./column-types/dates.js"
+export {
+  isFilterGroup,
+  viewsEqual,
+  type FilterCondition,
+  type FilterGroup,
+  type GroupBy,
+  type SheetView,
+  type SortKey,
+  type ViewIssue,
+} from "./view.js"
+export {
+  compileFilter,
+  countRows,
+  type CompiledFilter,
+  type CompileFilterOptions,
+  type RowTest,
+} from "./filter.js"
+export {
+  createViewModel,
+  type ViewGroup,
+  type ViewModel,
+  type ViewModelOptions,
+  type ViewResult,
+} from "./view-model.js"
 export {
   createTypeRegistry,
   defineColumns,
