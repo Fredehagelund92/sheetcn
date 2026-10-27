@@ -8,105 +8,22 @@
 // A filter or a sort is several milliseconds of work in one piece, so other
 // work on the machine (the suite runs its files in parallel) lands inside
 // some runs. Those gates take the fastest of several runs, the one least
-// disturbed, and log the median beside it.
+// disturbed, and log the median beside it. The first sort by text, which is
+// one sort through the collator, is gated in text-sort.perf.test.ts.
 import { describe, expect, it } from "vitest"
 
+import { createSheetStore, type SheetView } from "../src/index.js"
 import {
-  createSheetStore,
-  createViewModel,
-  defineColumns,
-  type Column,
-  type SheetView,
-} from "../src/index.js"
-
-type Row = {
-  id: string
-  account: string
-  score: number | null
-  updated: string | null
-  status: string
-} & Record<`c${number}`, number>
-
-const ROWS = 100_000
-const TODAY = "2026-10-27"
-
-const columns: Column<Row>[] = defineColumns<Row>((c) => [
-  c.text("account"),
-  c.number("score"),
-  c.date("updated"),
-  c.select("status", {
-    options: [
-      { value: "review", label: "Needs review" },
-      { value: "conflict", label: "Conflict" },
-      { value: "matched", label: "Matched" },
-      { value: "new", label: "New" },
-    ],
-  }),
-  // 20 columns in all, as the other gates have.
-  ...Array.from({ length: 16 }, (_, j) => c.number(`c${j}`)),
-])
-const getRowId = (r: Row) => r.id
-
-// Deterministic, invented.
-let seed = 7
-const random = () => {
-  seed = (seed * 48271) % 2147483647
-  return seed / 2147483647
-}
-const WORDS = [
-  "Kestrel",
-  "Nordic",
-  "Harbor",
-  "Café",
-  "Lumen",
-  "Atlas",
-  "Quill",
-  "Ölstube",
-]
-const STATUS = ["review", "conflict", "matched", "matched", "matched", "new"]
-
-// Rows as an app reads them, from JSON. (Rows built by adding 16 properties
-// one by one would be slow dictionaries in V8, which no filter can help.)
-function makeRows(): Row[] {
-  return JSON.parse(JSON.stringify(rowsOfFields())) as Row[]
-}
-
-function rowsOfFields(): Row[] {
-  return Array.from({ length: ROWS }, (_, i) => {
-    const day = 1 + Math.floor(random() * 300)
-    const date = new Date(Date.UTC(2026, 0, day)).toISOString().slice(0, 10)
-    const row = {
-      id: `r${i}`,
-      account: `${WORDS[Math.floor(random() * 8)]} ${WORDS[Math.floor(random() * 8)]} ${i}`,
-      score: i % 50 === 0 ? null : Math.round(random() * 1000) / 1000,
-      updated: i % 40 === 0 ? null : date,
-      status: STATUS[Math.floor(random() * STATUS.length)] as string,
-    } as Row
-    for (let j = 0; j < 16; j++) row[`c${j}`] = i + j
-    return row
-  })
-}
-
-function time(runs: number, work: (i: number) => void) {
-  work(-1)
-  const times: number[] = []
-  for (let i = 0; i < runs; i++) {
-    const start = performance.now()
-    work(i)
-    times.push(performance.now() - start)
-  }
-  times.sort((a, b) => a - b)
-  return {
-    fastest: times[0] as number,
-    median: times[Math.floor(times.length / 2)] as number,
-  }
-}
-
-const show = ({ fastest, median }: { fastest: number; median: number }) =>
-  `${fastest.toFixed(2)} ms (median ${median.toFixed(2)} ms)`
-
-const model = (view: SheetView) =>
-  createViewModel({ columns, getRowId, view, today: TODAY })
+  columns,
+  getRowId,
+  makeRows,
+  model,
+  random,
+  ROWS,
+  show,
+  time,
+  type Row,
+} from "./budget-data.js"
 
 const threeFilters: SheetView = {
   filter: {
@@ -168,13 +85,7 @@ describe(`filter, sort and group on ${ROWS.toLocaleString("en")} rows`, () => {
       }),
     })
     const number = both({ sort: [{ column: "score", dir: "asc" }] })
-    const textView: SheetView = { sort: [{ column: "account", dir: "asc" }] }
-    // The first sort by text is gated on its median, in up to three tries
-    // of seven runs: work elsewhere on the machine can slow a whole try.
-    let text = both(textView)
-    for (let tries = 1; tries < 3 && text.cold.median >= 100; tries++) {
-      text = both(textView)
-    }
+    const text = both({ sort: [{ column: "account", dir: "asc" }] })
     const grouped = both({
       group: { column: "status" },
       sort: [{ column: "score", dir: "desc" }],
@@ -188,7 +99,6 @@ describe(`filter, sort and group on ${ROWS.toLocaleString("en")} rows`, () => {
     }
     expect(number.cold.fastest).toBeLessThan(100)
     expect(grouped.cold.fastest).toBeLessThan(100)
-    expect(text.cold.median).toBeLessThan(100)
     for (const { warm } of [number, text, grouped]) {
       expect(warm.fastest).toBeLessThan(100)
     }
