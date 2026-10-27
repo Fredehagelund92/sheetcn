@@ -89,11 +89,15 @@ export type AnyColumnTypeDef = ColumnTypeDef<
 
 /** The stored value type of a definition. */
 export type TypeValue<D> =
-  D extends ColumnTypeDef<infer V, object, unknown> ? V : never
+  D extends ColumnTypeDef<infer V, object, unknown, string, string>
+    ? V
+    : never
 
 /** The options type of a definition. */
 export type TypeOptions<D> =
-  D extends ColumnTypeDef<CellValue, infer O, unknown> ? O : never
+  D extends ColumnTypeDef<CellValue, infer O, unknown, string, string>
+    ? O
+    : never
 
 /** The names of the options a definition requires. */
 export type TypeRequired<D> =

@@ -155,7 +155,8 @@ describe("a registry's helpers", () => {
   })
 
   it("throw for an unknown option or a missing required option", () => {
-    type Loose = Record<string, (...args: unknown[]) => Column<Row>>
+    type Helper = (...args: unknown[]) => Column<Row>
+    type Loose = { rating: Helper; select: Helper }
     const run = (build: (c: Loose) => Column<Row>) =>
       types.defineColumns<Row>((c) => [build(c as unknown as Loose)])
     expect(() => run((c) => c.rating("stars", { optoins: 3 }))).toThrow(
