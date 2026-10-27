@@ -113,13 +113,14 @@ function repeatIssue<Row>(
 ): Issue | null {
   const holders = valueIndexFor(rows, column).get(valueKey(value))
   if (!holders || holders.size < 2) return null
-  let first = Infinity
-  for (const other of holders) {
-    if (other === row) continue
-    const at = rows.indexOf(other as Row)
-    if (at >= 0 && at < first) first = at
+  // One forward pass that stops at the first other row holding the value.
+  for (let at = 0; at < rows.length; at++) {
+    const other = rows[at] as Row
+    if (other !== row && holders.has(other)) {
+      return { message: `Also in row ${at + 1}` }
+    }
   }
-  return first === Infinity ? null : { message: `Also in row ${first + 1}` }
+  return null
 }
 
 /**

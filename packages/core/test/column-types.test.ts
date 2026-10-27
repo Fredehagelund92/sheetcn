@@ -260,6 +260,24 @@ describe("identifier uniqueness", () => {
     expect(now()).toEqual([null, null, null])
   })
 
+  it("stays fast when one value repeats on 20,000 of 100,000 rows", () => {
+    const data = rows(
+      ...Array.from({ length: 100_000 }, (_, i) =>
+        i % 5 === 0 ? "DUP" : `S${i}`
+      )
+    )
+    const started = performance.now()
+    const found = data
+      .slice(0, 50)
+      .filter((r) => r.sku === "DUP")
+      .map((r) => validateCell(column, r.sku, r, data)?.message)
+    const elapsed = performance.now() - started
+    expect(found).toHaveLength(10)
+    expect(found[0]).toBe("Also in row 6")
+    expect(found[1]).toBe("Also in row 1")
+    expect(elapsed).toBeLessThan(100)
+  })
+
   it("keeps each array's own answer when a change branches from it", () => {
     const getRowId = (r: Row) => r.id
     const before = rows("A", "B")
