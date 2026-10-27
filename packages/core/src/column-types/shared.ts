@@ -4,13 +4,9 @@ import { fail, ok } from "../values.js"
 
 /**
  * Orders text as words in the host's language, as people read it: the
- * order of `new Intl.Collator().compare`. `localeCompare` with no locale
- * gives the same order and runs faster in V8, which sorting 100,000 texts
- * feels.
+ * order of `new Intl.Collator().compare`.
  */
-export const collator = {
-  compare: (a: string, b: string): number => a.localeCompare(b),
-}
+export const collator = new Intl.Collator()
 
 /** An empty options object, for types with no options. */
 export const noOptions: object = {}

@@ -168,7 +168,13 @@ describe(`filter, sort and group on ${ROWS.toLocaleString("en")} rows`, () => {
       }),
     })
     const number = both({ sort: [{ column: "score", dir: "asc" }] })
-    const text = both({ sort: [{ column: "account", dir: "asc" }] })
+    const textView: SheetView = { sort: [{ column: "account", dir: "asc" }] }
+    // The first sort by text is gated on its median, in up to three tries
+    // of seven runs: work elsewhere on the machine can slow a whole try.
+    let text = both(textView)
+    for (let tries = 1; tries < 3 && text.cold.median >= 100; tries++) {
+      text = both(textView)
+    }
     const grouped = both({
       group: { column: "status" },
       sort: [{ column: "score", dir: "desc" }],
@@ -182,10 +188,7 @@ describe(`filter, sort and group on ${ROWS.toLocaleString("en")} rows`, () => {
     }
     expect(number.cold.fastest).toBeLessThan(100)
     expect(grouped.cold.fastest).toBeLessThan(100)
-    // A cold sort of 100,000 distinct texts is one sort through the
-    // collator, which no cache can skip: about 60 ms on a fast idle
-    // machine, and well over 100 ms on a slow or busy one. It is logged,
-    // not gated; the 100 ms gate for sorting is to paint, in the browser.
+    expect(text.cold.median).toBeLessThan(100)
     for (const { warm } of [number, text, grouped]) {
       expect(warm.fastest).toBeLessThan(100)
     }

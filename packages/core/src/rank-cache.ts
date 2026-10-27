@@ -32,6 +32,32 @@ const caches = new WeakMap<readonly unknown[], Entry[]>()
 // with more, the rows are sorted instead, which skips the lookups.
 const FEW = 1024
 
+// A row position as two characters at the end of its key, so that sorting
+// the keys gives the positions back. Positions below 2^25 fit.
+const TAG = 0x100
+
+/**
+ * Puts texts in nearly their final order with the engine's own string sort,
+ * on lower-case keys made once per row, so the sort through `compare` that
+ * follows finds them almost in order and needs about one comparison per row.
+ * The order it gives is the comparator's alone: this only saves it work.
+ */
+function presort(filled: number[], values: readonly unknown[]): void {
+  for (const i of filled) if (typeof values[i] !== "string") return
+  const keyed = filled.map(
+    (i) =>
+      (values[i] as string).toLowerCase() +
+      String.fromCharCode(TAG + (i >>> 9), TAG + (i & 511))
+  )
+  keyed.sort()
+  for (let j = 0; j < keyed.length; j++) {
+    const k = keyed[j] as string
+    filled[j] =
+      ((k.charCodeAt(k.length - 2) - TAG) << 9) |
+      (k.charCodeAt(k.length - 1) - TAG)
+  }
+}
+
 function build<Row>(rows: readonly Row[], source: RankSource<Row>): Ranks {
   const n = rows.length
   const compare = source.compare
@@ -69,6 +95,7 @@ function build<Row>(rows: readonly Row[], source: RankSource<Row>): Ranks {
     if (values[i] === null) ranks[i] = -1
     else filled.push(i)
   }
+  presort(filled, values)
   filled.sort((x, y) => compare(values[x], values[y]))
   let previous: unknown
   for (let j = 0; j < filled.length; j++) {

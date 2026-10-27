@@ -81,6 +81,48 @@ describe("createViewModel, sort", () => {
       ids(model({ sort: [{ column: "status", dir: "asc" }] }).compute(rows))
     ).toEqual(["b", "d", "c", "a", "f", "e"])
   })
+
+  it("orders many distinct texts exactly as the collator does", () => {
+    const parts = [
+      "a",
+      "A",
+      "á",
+      "Z",
+      "z",
+      "é",
+      "E",
+      "1",
+      "10",
+      "-",
+      " ",
+      "_",
+      "ö",
+      "aa",
+      "å",
+    ]
+    const many: Item[] = Array.from({ length: 3000 }, (_, i) => ({
+      id: `m${i}`,
+      name:
+        i % 97 === 0
+          ? null
+          : `${parts[(i * 7) % parts.length]}${parts[(i * 13) % parts.length]}${parts[(i * 5) % parts.length]}${i}`,
+      qty: null,
+      due: null,
+      status: null,
+    }))
+    const collator = new Intl.Collator()
+    const expected = many
+      .filter((r) => r.name !== null)
+      .sort((a, b) => collator.compare(a.name as string, b.name as string))
+      .map((r) => r.name)
+    const asc = model({ sort: [{ column: "name", dir: "asc" }] }).compute(many)
+    expect(asc.rows.map((r) => r.name).slice(0, expected.length)).toEqual(
+      expected
+    )
+    expect(asc.rows.slice(expected.length).every((r) => r.name === null)).toBe(
+      true
+    )
+  })
 })
 
 describe("createViewModel, group", () => {
