@@ -21,7 +21,7 @@ function press(shortcut: string, extra: Partial<KeyInput> = {}): KeyInput {
   }
 }
 
-const grid: KeyContext = { editing: null, activeColumnType: "text" }
+const grid: KeyContext = { editing: null, activeEdit: "text" }
 const cmd = (shortcut: string, context: KeyContext = grid) =>
   keyToCommand(press(shortcut), context)
 
@@ -190,8 +190,8 @@ describe("arrows while editing", () => {
   })
 })
 
-describe("boolean cells", () => {
-  const boolean: KeyContext = { editing: null, activeColumnType: "boolean" }
+describe("toggle cells (a boolean type)", () => {
+  const boolean: KeyContext = { editing: null, activeEdit: "toggle" }
   it("toggle with Space or Enter and have no editor", () => {
     expect(cmd("Space", boolean)).toEqual({ type: "toggle" })
     expect(cmd("Enter", boolean)).toEqual({ type: "toggle" })
@@ -213,6 +213,35 @@ describe("boolean cells", () => {
   it("leave shortcuts alone", () => {
     expect(cmd("Mod+q", boolean)).toBeNull()
     expect(cmd("Mod+z", boolean)).toEqual({ type: "undo" })
+  })
+})
+
+describe("cells not edited in place", () => {
+  const none: KeyContext = { editing: null, activeEdit: "none" }
+  it("open no editor and toggle nothing", () => {
+    for (const k of ["Enter", "Space", "a", "Dead"]) {
+      expect(cmd(k, none)).toEqual({ type: "ignore" })
+    }
+    expect(cmd("F2", none)).toBeNull()
+  })
+
+  it("still clear, move and select", () => {
+    expect(cmd("Delete", none)).toEqual({ type: "clear" })
+    expect(cmd("ArrowDown", none)).toMatchObject({ type: "move" })
+    expect(cmd("Shift+Enter", none)).toMatchObject({ type: "move" })
+  })
+})
+
+describe("popup cells", () => {
+  const popup: KeyContext = { editing: null, activeEdit: "popup" }
+  it("open their editor like text cells", () => {
+    expect(cmd("Enter", popup)).toEqual({ type: "startEdit", mode: "edit" })
+    expect(cmd("F2", popup)).toEqual({ type: "startEdit", mode: "edit" })
+    expect(cmd("a", popup)).toEqual({
+      type: "startEdit",
+      mode: "replace",
+      text: "a",
+    })
   })
 })
 

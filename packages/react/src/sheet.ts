@@ -7,6 +7,7 @@ import {
   navigate,
   parseCell,
   rectsContain,
+  resolveColumnType,
   sampleRowIndexes,
   type ActiveRange,
   type CellIndex,
@@ -518,11 +519,10 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   commandForKey = (event: KeyInput): SheetCommand | null => {
     const active = this.getActiveRange()
     const columnId = active && this.#columnIdAt(active.anchor.columnIndex)
+    const column = columnId ? this.getColumn(columnId) : undefined
     return keyToCommand(event, {
       editing: this.#state.editing?.mode ?? null,
-      activeColumnType: columnId
-        ? (this.getColumn(columnId)?.type ?? null)
-        : null,
+      activeEdit: column ? editHint(column) : null,
     })
   }
 
@@ -608,7 +608,9 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
       this.#notify(`${column.header} is read-only`)
       return false
     }
-    if (column.type === "boolean") return this.#toggle()
+    const edit = editHint(column)
+    if (edit === "toggle") return this.#toggle()
+    if (edit === "none") return false
     const draft = text ?? formatCell(column, getCellValue(column, row.original))
     this.#setState({
       editing: {
@@ -666,7 +668,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
 
   #toggle(): boolean {
     const cell = this.#activeCell()
-    if (!cell || cell.column.type !== "boolean") return false
+    if (!cell || editHint(cell.column) !== "toggle") return false
     const { row, column } = cell
     if (isCellReadOnly(column, row.original)) {
       this.#notify(`${column.header} is read-only`)
@@ -745,6 +747,11 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
       focus: { rowIndex: maxRow, columnIndex: maxColumn },
     })
   }
+}
+
+/** How a column's type is edited. */
+function editHint<Row>(column: Column<Row>) {
+  return resolveColumnType(column).def.edit ?? "text"
 }
 
 // One id list per column index map; TanStack memoizes the map.

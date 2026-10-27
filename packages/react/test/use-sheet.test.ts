@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import {
   applyChange,
+  builtInTypes,
+  createTypeRegistry,
+  defineColumnType,
   defineColumns,
   type CellRange,
   type Change,
@@ -239,6 +242,55 @@ describe("editing", () => {
     key("Enter")
     expect(sheet().getState().editing).toBeNull()
     expect(sheet().getState().notice).toBe("SKU is read-only")
+  })
+})
+
+describe("a registry's types", () => {
+  // A type whose cells are not edited in place, and a toggle of its own.
+  const stamp = defineColumnType({
+    id: "stamp",
+    label: "Stamp",
+    defaultOptions: {},
+    parse: (text) => ({ ok: true, value: text || null }),
+    format: (value: string) => value,
+    edit: "none",
+  })
+  const flag = defineColumnType({
+    id: "flag",
+    label: "Flag",
+    defaultOptions: {},
+    parse: (text) => ({ ok: true, value: text === "on" }),
+    format: (value: boolean) => (value ? "on" : "off"),
+    edit: "toggle",
+  })
+  const types = createTypeRegistry([...builtInTypes, stamp, flag])
+  const typed = types.defineColumns<Item>((c) => [
+    c.stamp("name"),
+    c.flag("done"),
+  ])
+
+  it("open no editor on a cell that is not edited in place", () => {
+    const { key, sheet, value } = setup({ columns: typed, types })
+    for (const k of ["Enter", "a", " "]) {
+      expect(key(k).command).toEqual({ type: "ignore" })
+    }
+    expect(sheet().startEdit()).toBe(false)
+    expect(sheet().getState().editing).toBeNull()
+    key("Delete")
+    expect(value("r0", "name")).toBeNull()
+  })
+
+  it("toggle a toggle type of their own", () => {
+    const { key, value } = setup({ columns: typed, types })
+    key("ArrowRight")
+    key(" ")
+    expect(value("r0", "done")).toBe(true)
+  })
+
+  it("must include the columns' types", () => {
+    expect(() => setup({ columns: typed })).toThrow(
+      'Column "name" has the type "stamp", which this sheet\'s types do not include'
+    )
   })
 })
 

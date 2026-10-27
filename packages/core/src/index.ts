@@ -1,8 +1,10 @@
 export type {
+  BuiltInTypeId,
   CellValue,
   Change,
   ChangeSource,
   Column,
+  ColumnSpec,
   ColumnType,
   InsertedRow,
   Issue,
@@ -11,24 +13,55 @@ export type {
   SelectOption,
 } from "./types.js"
 export {
-  assertColumns,
+  defineColumnType,
+  type AnyColumnTypeDef,
+  type ColumnTypeDef,
+  type EditHint,
+  type TypeGroup,
+  type TypeOptions,
+  type TypeValue,
+} from "./type-def.js"
+export {
+  booleanType,
+  builtInTypes,
+  dateType,
+  numberType,
+  selectType,
+  textType,
+  type SelectOptions,
+} from "./built-in-types.js"
+export {
+  createTypeRegistry,
   defineColumns,
+  type ColumnHelpers,
+  type TypeHelper,
+  type TypeHelpers,
+  type TypeRegistry,
+} from "./registry.js"
+export {
+  assertColumns,
   getCellValue,
   isCellReadOnly,
+  toColumnSpec,
   type AccessorColumnOptions,
-  type ColumnHelpers,
   type KeyColumnOptions,
   type KeysOfType,
 } from "./columns.js"
 export {
+  cellsEqual,
+  compareCells,
   formatCell,
+  parseCell,
+  resolveColumnType,
+  validateCell,
+  type ResolvedType,
+} from "./cells.js"
+export {
   isIsoDate,
   parseBoolean,
-  parseCell,
   parseDate,
   parseNumber,
   parseSelect,
-  validateCell,
 } from "./values.js"
 export { applyChange, invertChange, type ChangeContext } from "./change.js"
 export {

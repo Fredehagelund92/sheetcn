@@ -1,4 +1,6 @@
-import type { CellValue, Column, ColumnType, SelectOption } from "./types.js"
+import { resolveColumnType } from "./cells.js"
+import type { TypeRegistry } from "./registry.js"
+import type { CellValue, Column, ColumnSpec } from "./types.js"
 
 /** Keys of `Row` whose values fit `V` (or are empty). */
 export type KeysOfType<Row, V> = {
@@ -33,114 +35,46 @@ export type AccessorColumnOptions<Row, V extends CellValue> = Shared<Row, V> & {
   value: (row: Row) => V | null
 }
 
-type WithOptions = { options: SelectOption[] }
-
-type Helper<Row, V extends CellValue, Extra = unknown> = {
-  (
-    key: KeysOfType<Row, V>,
-    options?: KeyColumnOptions<Row, V> & Extra
-  ): Column<Row, V>
-  (id: string, options: AccessorColumnOptions<Row, V> & Extra): Column<Row, V>
-}
-
-export type ColumnHelpers<Row> = {
-  text: Helper<Row, string>
-  number: Helper<Row, number>
-  /** Dates are stored as ISO strings ("2026-03-01"). */
-  date: Helper<Row, string>
-  select: {
-    (
-      key: KeysOfType<Row, string>,
-      options: KeyColumnOptions<Row, string> & WithOptions
-    ): Column<Row, string>
-    (
-      id: string,
-      options: AccessorColumnOptions<Row, string> & WithOptions
-    ): Column<Row, string>
-  }
-  boolean: Helper<Row, boolean>
-}
-
-type Row = Record<string, unknown>
-
-function makeHelper(type: ColumnType) {
-  return (
-    keyOrId: string,
-    options: Partial<AccessorColumnOptions<Row, CellValue>> & {
-      id?: string
-      options?: SelectOption[]
-    } = {}
-  ): Column<Row> => {
-    const { value, id, ...rest } = options
-    if (typeof value === "function") {
-      return { header: keyOrId, ...rest, id: keyOrId, type, value }
-    }
-    return {
-      write: (row, next) => ({ ...row, [keyOrId]: next }),
-      header: id ?? keyOrId,
-      ...rest,
-      id: id ?? keyOrId,
-      type,
-      value: keyOrId,
-    }
-  }
-}
-
-const helpers = {
-  text: makeHelper("text"),
-  number: makeHelper("number"),
-  date: makeHelper("date"),
-  select: makeHelper("select"),
-  boolean: makeHelper("boolean"),
-}
-
 /**
- * Builds a typed column list. Each helper checks that a key holds the right
- * kind of value, and the result is a plain `Column<Row>[]`:
- *
- * ```ts
- * const columns = defineColumns<Item>((c) => [
- *   c.text("name", { header: "Name" }),
- *   c.number("price", { format: (v) => v.toFixed(2) }),
- *   c.number("total", { value: (row) => row.price * row.qty }),
- * ])
- * ```
+ * Throws when ids repeat, or when a column's type is unknown or rejects its
+ * options (a select's labels must be filled in and distinct, for instance).
+ * With `types`, also when a column's type is not the one `types` defines
+ * under its id.
  */
-export function defineColumns<Row>(
-  build: (c: ColumnHelpers<Row>) => Column<Row>[]
-): Column<Row>[] {
-  const columns = build(helpers as unknown as ColumnHelpers<Row>)
-  assertColumns(columns)
-  return columns
-}
-
-/**
- * Throws when ids repeat, or when a select column has an empty label or
- * repeats an option value or label (a pasted label must name one option).
- */
-export function assertColumns<Row>(columns: readonly Column<Row>[]): void {
+export function assertColumns<Row>(
+  columns: readonly Column<Row>[],
+  types?: Pick<TypeRegistry, "get">
+): void {
   const ids = new Set<string>()
   for (const column of columns) {
     if (ids.has(column.id)) {
       throw new Error(`Two columns have the id "${column.id}"`)
     }
     ids.add(column.id)
-    if (column.type !== "select") continue
-    const values = new Set<string>()
-    const labels = new Set<string>()
-    for (const o of column.options ?? []) {
-      if (o.label.trim() === "") {
-        throw new Error(`Column "${column.id}" has an option with no label`)
-      }
-      if (values.has(o.value) || labels.has(o.label)) {
-        throw new Error(
-          `Column "${column.id}" has two options with the value "${o.value}" or the label "${o.label}"`
-        )
-      }
-      values.add(o.value)
-      labels.add(o.label)
+    const { def } = resolveColumnType(column)
+    if (types && types.get(column.type) !== def) {
+      throw new Error(
+        `Column "${column.id}" has the type "${column.type}", which this sheet's types ${types.get(column.type) ? "define differently" : "do not include"}`
+      )
     }
   }
+}
+
+/** The plain-data part of a column, for persistence and history. */
+export function toColumnSpec<Row>(column: Column<Row>): ColumnSpec {
+  const spec: ColumnSpec = {
+    id: column.id,
+    header: column.header,
+    type: column.type,
+  }
+  if (column.typeOptions !== undefined) spec.typeOptions = column.typeOptions
+  if (column.width !== undefined) spec.width = column.width
+  if (column.minWidth !== undefined) spec.minWidth = column.minWidth
+  if (column.maxWidth !== undefined) spec.maxWidth = column.maxWidth
+  if (column.grow !== undefined) spec.grow = column.grow
+  if (column.pin !== undefined) spec.pin = column.pin
+  if (typeof column.readOnly === "boolean") spec.readOnly = column.readOnly
+  return spec
 }
 
 /** Reads a cell. A missing property reads as empty. */

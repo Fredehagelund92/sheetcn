@@ -1,5 +1,5 @@
 import type { Direction, Navigation } from "./selection.js"
-import type { ColumnType } from "./types.js"
+import type { EditHint } from "./type-def.js"
 
 /**
  * How a cell is being edited, as in spreadsheets:
@@ -30,9 +30,9 @@ export type SheetCommand =
   /** Commits the editor, then moves the active cell one step (or stays). */
   | { type: "commitEdit"; move: Direction | null }
   | { type: "cancelEdit" }
-  /** Flips a boolean cell, which has no editor. */
+  /** Flips a cell whose type toggles (a boolean), which has no editor. */
   | { type: "toggle" }
-  /** A key the sheet swallows without doing anything (typing on a boolean cell). */
+  /** A key the sheet swallows without doing anything (typing on a toggle cell). */
   | { type: "ignore" }
   /** Empties the selected cells. */
   | { type: "clear" }
@@ -55,8 +55,8 @@ export type KeyInput = {
 export type KeyContext = {
   /** The editor's mode, or null when no cell is being edited. */
   editing: EditMode | null
-  /** The column type of the active cell. */
-  activeColumnType?: ColumnType | null
+  /** How the active cell's type is edited (its `edit`). Default: "text". */
+  activeEdit?: EditHint | null
   /** A cut is waiting for a paste. Escape cancels it. */
   cutPending?: boolean
 }
@@ -122,9 +122,12 @@ function editingKey(e: KeyInput, mode: EditMode): SheetCommand | null {
 }
 
 function gridKey(e: KeyInput, context: KeyContext): SheetCommand | null {
-  const boolean = context.activeColumnType === "boolean"
+  const edit = context.activeEdit ?? "text"
+  const toggle = edit === "toggle"
+  // No text editor opens on a toggle cell or one that is not edited in place.
+  const noEditor = toggle || edit === "none"
   if (e.isComposing || e.key === "Process" || e.key === "Dead") {
-    if (boolean) return { type: "ignore" }
+    if (noEditor) return { type: "ignore" }
     return { type: "startEdit", mode: "replace", text: "", composing: true }
   }
   const mod = e.metaKey || e.ctrlKey
@@ -147,9 +150,11 @@ function gridKey(e: KeyInput, context: KeyContext): SheetCommand | null {
     case "Enter":
       if (mod || e.altKey) return null
       if (e.shiftKey) return { type: "move", direction: "up", extend: false }
-      return boolean ? { type: "toggle" } : { type: "startEdit", mode: "edit" }
+      if (toggle) return { type: "toggle" }
+      if (noEditor) return { type: "ignore" }
+      return { type: "startEdit", mode: "edit" }
     case "F2":
-      if (mod || e.altKey || e.shiftKey || boolean) return null
+      if (mod || e.altKey || e.shiftKey || noEditor) return null
       return { type: "startEdit", mode: "edit" }
     case "Escape":
       return context.cutPending ? { type: "cancelCut" } : { type: "collapse" }
@@ -177,7 +182,7 @@ function gridKey(e: KeyInput, context: KeyContext): SheetCommand | null {
     case " ":
       if (e.shiftKey && !mod) return { type: "selectRows" }
       if (mod && !e.shiftKey && !e.altKey) return { type: "selectColumns" }
-      if (boolean && !e.altKey) return { type: "toggle" }
+      if (toggle && !e.altKey) return { type: "toggle" }
       break
   }
 
@@ -194,7 +199,7 @@ function gridKey(e: KeyInput, context: KeyContext): SheetCommand | null {
   }
 
   if (isTyping(e)) {
-    if (boolean) return { type: "ignore" }
+    if (noEditor) return { type: "ignore" }
     return { type: "startEdit", mode: "replace", text: e.key }
   }
   return null

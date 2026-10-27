@@ -1,14 +1,10 @@
-import type {
-  CellValue,
-  Column,
-  ColumnType,
-  Issue,
-  ParseResult,
-  SelectOption,
-} from "./types.js"
+import type { ParseResult, SelectOption } from "./types.js"
 
-const ok = <V>(value: V): ParseResult<V> => ({ ok: true, value })
-const fail = (error: string): ParseResult<never> => ({ ok: false, error })
+export const ok = <V>(value: V): ParseResult<V> => ({ ok: true, value })
+export const fail = (error: string): ParseResult<never> => ({
+  ok: false,
+  error,
+})
 
 // A plain number, or one grouped with commas in threes ("1,234,567.5").
 // The exponent is only allowed on plain numbers, as String(n) writes it.
@@ -108,82 +104,4 @@ export function parseSelect(
     options.find((o) => o.label.toLowerCase() === lower) ??
     options.find((o) => o.value.toLowerCase() === lower)
   return option ? ok(option.value) : fail(`"${t}" is not one of the options`)
-}
-
-/** Text to a cell value: the column's own `parse`, or the default for its type. */
-export function parseCell<Row>(
-  column: Column<Row>,
-  text: string
-): ParseResult<CellValue> {
-  if (column.parse) return column.parse(text)
-  switch (column.type) {
-    case "number":
-      return parseNumber(text)
-    case "date":
-      return parseDate(text)
-    case "boolean":
-      return parseBoolean(text)
-    case "select":
-      return parseSelect(text, column.options ?? [])
-    case "text":
-      return ok(text)
-  }
-}
-
-/** A cell value to text for display and copy. Empty cells format as "". */
-export function formatCell<Row>(column: Column<Row>, value: CellValue): string {
-  if (value === null) return ""
-  if (column.format) return column.format(value)
-  switch (column.type) {
-    case "boolean":
-      return value === true ? "TRUE" : value === false ? "FALSE" : String(value)
-    case "select":
-      return (
-        column.options?.find((o) => o.value === value)?.label ?? String(value)
-      )
-    default:
-      return String(value)
-  }
-}
-
-function typeIssue(
-  type: ColumnType,
-  value: CellValue,
-  options: readonly SelectOption[] | undefined
-): Issue | null {
-  switch (type) {
-    case "text":
-      return typeof value === "string" ? null : { message: "Not text" }
-    case "number":
-      return typeof value === "number" && Number.isFinite(value)
-        ? null
-        : { message: "Not a number" }
-    case "date":
-      return typeof value === "string" && isIsoDate(value)
-        ? null
-        : { message: "Not a date in YYYY-MM-DD form" }
-    case "boolean":
-      return typeof value === "boolean" ? null : { message: "Not yes or no" }
-    case "select":
-      return typeof value === "string" &&
-        (options ?? []).some((o) => o.value === value)
-        ? null
-        : { message: "Not one of the options" }
-  }
-}
-
-/**
- * Checks a stored value: first that it fits the column's type, then the
- * column's own `validate`. Empty cells pass the type check.
- */
-export function validateCell<Row>(
-  column: Column<Row>,
-  value: CellValue,
-  row: Row
-): Issue | null {
-  if (value !== null) {
-    const issue = typeIssue(column.type, value, column.options)
-    if (issue) return issue
-  }
-  return column.validate ? column.validate(value, row) : null
 }
