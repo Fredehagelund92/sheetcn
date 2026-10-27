@@ -101,6 +101,7 @@ export {
 } from "./filter-menu.js"
 export {
   createViewModel,
+  type ViewChange,
   type ViewGroup,
   type ViewModel,
   type ViewModelOptions,
@@ -141,6 +142,7 @@ export {
   parseSelect,
 } from "./values.js"
 export { applyChange, invertChange, type ChangeContext } from "./change.js"
+export { patchedRows } from "./patch-record.js"
 export {
   createSheetStore,
   type HistoryState,

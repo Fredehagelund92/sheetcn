@@ -1,3 +1,4 @@
+import { recordPatch } from "./patch-record.js"
 import { handOverRanks } from "./rank-cache.js"
 import { handOverIndex, indexFor } from "./row-index.js"
 import { handOverTextCaches } from "./text-cache.js"
@@ -145,6 +146,7 @@ export function applyChange<Row>(
       patched.add(p)
     }
     handOverIndex(rows, next)
+    recordPatch(rows, next, [...patched])
     handOverTextCaches(rows, next, patched)
     handOverRanks(rows, next, () =>
       [...patched].map((p) => [rows[p] as Row, next[p] as Row] as const)

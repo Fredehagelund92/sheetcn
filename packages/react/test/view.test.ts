@@ -207,4 +207,38 @@ describe("keys and selection over a view", () => {
     const after = sheet().getRows()
     expect(after.filter((row) => !before.has(row))).toHaveLength(1)
   })
+
+  it.each([
+    ["sorted", byPrice],
+    ["filtered and sorted", { ...under45, ...byPrice }],
+  ])("lists the rows a view of a sheet shows as a fresh one would after each commit, %s", (_, view) => {
+    const { sheet, ids } = setup({ defaultView: view })
+    const price = sheet().columnIndexOf("price")
+    // Edits that move a row up, down, out of the filter and back in.
+    for (const [rowIndex, value] of [
+      [0, "5"],
+      [2, "99"],
+      [0, "35"],
+      [1, "1"],
+      [0, "44"],
+    ] as const) {
+      inAct(() => {
+        sheet().select({
+          anchor: { rowIndex, columnIndex: price },
+          focus: { rowIndex, columnIndex: price },
+        })
+        sheet().startEdit("replace", value)
+        sheet().commitEdit(null)
+      })
+      const data = sheet().store.getRows()
+      const fresh = data
+        .filter((r) => !("filter" in view) || (r.price ?? Infinity) < 45)
+        .toSorted((a, b) => (a.price ?? 0) - (b.price ?? 0))
+        .map((r) => r.id)
+      expect(ids()).toEqual(fresh)
+      ids().forEach((id, position) => {
+        expect(sheet().rowIndexOf(id)).toBe(position)
+      })
+    }
+  })
 })

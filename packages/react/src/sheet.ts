@@ -31,6 +31,7 @@ import {
 import type { RowData } from "@tanstack/react-table"
 
 import type { SheetRow, SheetTable } from "./features.js"
+import { numbered } from "./view-row-model.js"
 
 /** The cell being edited. */
 export type EditState = {
@@ -241,6 +242,10 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   #source: SheetSource<Row>
   #state = NO_STATE
   #columnsById = new Map<string, Column<Row>>()
+  // The row model whose rows have their display indexes set (see
+  // `#numberOnce`).
+  #numbered: unknown = null
+  #numberedTable: unknown = null
   readonly #listeners = new Set<() => void>()
   // Column layout outside TanStack's state. A change re-renders the host
   // through `subscribeLayout`.
@@ -261,6 +266,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   constructor(source: SheetSource<Row>) {
     this.#source = source
     this.#indexColumns()
+    this.#numberOnce()
   }
 
   /** Points the controller at a new render's table, store and columns. */
@@ -268,6 +274,30 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     const columnsChanged = source.columns !== this.#source.columns
     this.#source = source
     if (columnsChanged) this.#indexColumns()
+    this.#numberOnce()
+  }
+
+  /**
+   * TanStack numbers every row on each call to `getRowsInDisplayOrder` (and
+   * so on each `row.getDisplayIndex()`), which at 100,000 rows costs more
+   * than most of the calls are worth: its cell selection makes several per
+   * keystroke and per commit. The table's method is replaced by one that
+   * numbers the rows once per row model, and not at all when the view's row
+   * model numbered them as it listed them.
+   */
+  #numberOnce() {
+    const table = this.table
+    if (this.#numberedTable === table) return
+    this.#numberedTable = table
+    const number = table.getRowsInDisplayOrder.bind(table)
+    table.getRowsInDisplayOrder = () => {
+      const model = table.getPrePaginatedRowModel()
+      if (this.#numbered !== model) {
+        if (!numbered.has(model)) number()
+        this.#numbered = model
+      }
+      return model.rows
+    }
   }
 
   get table() {
@@ -289,7 +319,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
 
   // Layout -------------------------------------------------------------------
 
-  getRows = () => this.table.getRowsInDisplayOrder()
+  getRows = () => this.table.getRowsInDisplayOrder() as SheetRow<Row>[]
 
   getTotalRowCount = () => this.store.getRows().length
 
