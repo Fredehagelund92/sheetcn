@@ -1,5 +1,6 @@
 import { builtInTypes } from "./built-in-types.js"
-import { collator, isList, listsEqual } from "./column-types/shared.js"
+import { filterEnv } from "./column-types/dates.js"
+import { collator, fold, isList, listsEqual } from "./column-types/shared.js"
 import type { AnyColumnTypeDef } from "./type-def.js"
 import type { CellValue, Column, Issue, ParseResult } from "./types.js"
 import { valueIndexFor, valueKey } from "./value-index.js"
@@ -155,14 +156,17 @@ export function compareCells<Row>(
 }
 
 /**
- * Runs one of the type's filters on a value: whether the cell passes. Throws
- * when the type has no filter with that id.
+ * Runs one of the type's filters on one value: whether the cell passes. The
+ * operands are read on every call; to filter many rows, compile a view's
+ * filter once with `compileFilter`. Operands that do not parse match
+ * nothing. Throws when the type has no filter with that id.
  */
 export function filterCell<Row>(
   column: Column<Row>,
   filterId: string,
   value: CellValue,
-  operands: readonly string[] = []
+  operands: readonly string[] = [],
+  options: { today?: string } = {}
 ): boolean {
   const { def, prepared } = resolveColumnType(column)
   const filter = def.filters?.find((f) => f.id === filterId)
@@ -171,5 +175,14 @@ export function filterCell<Row>(
       `Column "${column.id}" (${def.label}) has no filter "${filterId}"`
     )
   }
-  return filter.test(value, operands, prepared)
+  const env = filterEnv(options.today)
+  if (filter.text) {
+    const compiled = filter.compile(operands, prepared, env)
+    if (!compiled.ok) return false
+    return compiled.value(
+      value === null ? null : fold(filter.text(value, prepared))
+    )
+  }
+  const compiled = filter.compile(operands, prepared, env)
+  return compiled.ok && compiled.value(value)
 }

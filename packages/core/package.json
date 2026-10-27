@@ -1,7 +1,7 @@
 {
   "name": "@sheetcn/core",
   "version": "0.0.0",
-  "description": "Headless spreadsheet core for sheetcn: column schema and column types, cell values, a row store with history, selection geometry and the keyboard map. No React, no DOM. The optional @sheetcn/core/phone entry adds phone numbers through libphonenumber-js.",
+  "description": "Headless spreadsheet core for sheetcn: column schema and column types, cell values, views that filter, sort and group, a row store with history, selection geometry and the keyboard map. No React, no DOM. The optional @sheetcn/core/phone entry adds phone numbers through libphonenumber-js.",
   "license": "MIT",
   "repository": {
     "type": "git",

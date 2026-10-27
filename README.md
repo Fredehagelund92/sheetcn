@@ -32,6 +32,7 @@
 - **Spreadsheet keys**: arrows, jumps to the edge of the data, paging, Enter or typing to edit, Tab and Enter to commit and move, Escape to cancel, undo and redo.
 - **Typed columns**: 14 built-in types, from text, number, date, select and boolean to long text, percent, money, identifier, email, URL, domain, phone and country, each with parse, format and validate. Nothing is guessed: `1,5`, `3/4/2026` and `$5` in a euro column are rejected, not read one way or the other.
 - **Custom types**: define a type once (parse, format, validate, equals, compare, how it is edited) and use it in any column, through a registry you pass to the sheet.
+- **Filter, sort and group in the core**: a view is plain JSON (a filter tree with all, any and not, sort keys, a grouping, hidden columns) that an app can save anywhere. Each type brings its filters, relative dates included, and 100,000 rows filter in a few milliseconds. The grid does not show views yet.
 - **One change for every mutation**: each edit, toggle, clear, undo and redo reaches your app as one `Change`, so saving it is one function.
 - **Undo and redo**: transactions are single steps, and a burst of typing undoes at once.
 - **Column sizing**: fixed widths, or fill the grid's width and scroll when the columns do not fit. Double-click a column's edge to fit it to its content.
@@ -68,16 +69,23 @@ Every frame below is a screenshot of the [playground](apps/playground), at 100,0
 
 All measured at 100,000 rows by 20 columns, and recorded with the change that added them.
 
-| What                                                                              | Measured                                                           | Gate        | Source                                                                                                                       |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| One-cell commit in the core                                                       | median 0.093 ms (0.109 ms controlled)                              | under 1 ms  | [`commit-budget.test.ts`](packages/core/test/commit-budget.test.ts), [#1](https://github.com/Fredehagelund92/sheetcn/pull/1) |
-| One-cell commit in a list cell or an identifier cell, uniqueness checked after it | median 0.025 to 0.033 ms                                           | under 1 ms  | [`commit-budget.test.ts`](packages/core/test/commit-budget.test.ts)                                                          |
-| One-cell commit to paint, in the browser                                          | median 2.0 to 3.8 ms                                               | under 5 ms  | [`bench.ts`](apps/playground/src/bench.ts), [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                          |
-| The same, with the CPU slowed 4 times                                             | median 7.1 to 9.5 ms                                               | under 25 ms | [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                                                                      |
-| Rows rendered again per one-cell commit                                           | 1                                                                  |             | [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                                                                      |
-| One-cell commit through `useSheet`, test DOM, no paint                            | 0.36 to 0.39 ms, against 38 to 50 ms with TanStack's own row model |             | [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                                                                      |
-| Scroll, three rows a frame, in the browser                                        | 60 fps; work per frame median 2.7 to 3.3 ms, none over 16.7 ms     | 60 fps      | [`bench.ts`](apps/playground/src/bench.ts)                                                                                   |
-| Fit one column to its content, in the browser                                     | 3 to 7 ms; all 20 columns in 35 ms                                 |             | [`sheet.ts`](packages/react/src/sheet.ts)                                                                                    |
+| What                                                                                         | Measured                                                                               | Gate                   | Source                                                                                                                       |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| One-cell commit in the core                                                                  | median 0.093 ms (0.109 ms controlled)                                                  | under 1 ms             | [`commit-budget.test.ts`](packages/core/test/commit-budget.test.ts), [#1](https://github.com/Fredehagelund92/sheetcn/pull/1) |
+| One-cell commit in a list cell or an identifier cell, uniqueness checked after it            | median 0.025 to 0.033 ms                                                               | under 1 ms             | [`commit-budget.test.ts`](packages/core/test/commit-budget.test.ts)                                                          |
+| Apply three filters (is any of, less than, in the last 30 days) in the core                  | 3.3 to 4.2 ms                                                                          | under 10 ms            | [`view-budget.test.ts`](packages/core/test/view-budget.test.ts)                                                              |
+| Apply a text filter (contains) in the core, once the column's text is folded                 | 2.1 to 2.8 ms; folding the column first, 21 to 28 ms                                   | under 10 ms            | [`view-budget.test.ts`](packages/core/test/view-budget.test.ts)                                                              |
+| Sort in the core, the first time on a rows array                                             | a number 15 to 22 ms, a select group sorted by a number 20 to 44 ms, text 96 to 137 ms | under 100 ms, to paint | [`view-budget.test.ts`](packages/core/test/view-budget.test.ts)                                                              |
+| Sort again in the core: the other way, or after a filter change                              | 5.0 to 13.6 ms                                                                         | under 100 ms           | [`view-budget.test.ts`](packages/core/test/view-budget.test.ts)                                                              |
+| One-cell commit with a filter, a sort and a group on, the view updated after it, in the core | median 0.23 to 0.63 ms                                                                 | under 1 ms             | [`view-budget.test.ts`](packages/core/test/view-budget.test.ts)                                                              |
+| One-cell commit to paint, in the browser                                                     | median 2.0 to 3.8 ms                                                                   | under 5 ms             | [`bench.ts`](apps/playground/src/bench.ts), [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                          |
+| The same, with the CPU slowed 4 times                                                        | median 7.1 to 9.5 ms                                                                   | under 25 ms            | [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                                                                      |
+| Rows rendered again per one-cell commit                                                      | 1                                                                                      |                        | [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                                                                      |
+| One-cell commit through `useSheet`, test DOM, no paint                                       | 0.36 to 0.39 ms, against 38 to 50 ms with TanStack's own row model                     |                        | [#2](https://github.com/Fredehagelund92/sheetcn/pull/2)                                                                      |
+| Scroll, three rows a frame, in the browser                                                   | 60 fps; work per frame median 2.7 to 3.3 ms, none over 16.7 ms                         | 60 fps                 | [`bench.ts`](apps/playground/src/bench.ts)                                                                                   |
+| Fit one column to its content, in the browser                                                | 3 to 7 ms; all 20 columns in 35 ms                                                     |                        | [`sheet.ts`](packages/react/src/sheet.ts)                                                                                    |
+
+The filter and sort numbers are the fastest of several runs, in three rounds on an Apple M5 that other work kept at a load average of 10 to 11; the medians were up to 35% higher. The rows come from JSON, as an app loads them. A first sort by text is one sort through the collator over 100,000 distinct texts, so its time depends on the machine: the core logs it rather than gating it, and its gate is to paint, in the browser, once the grid shows views.
 
 The browser numbers come from the playground's production build on a shared machine, three rounds of 50 commits each; the method is in [#2](https://github.com/Fredehagelund92/sheetcn/pull/2). A busier run of the same check recorded medians of 4.2 to 5.0 ms (1x) and 14.5 to 18 ms (4x). The commit and scroll numbers hold with fill sizing on. Measure your own with the "Measure commit" button in the [playground](#the-playground), or `__playground.measureScroll()` in its console.
 
@@ -185,12 +193,13 @@ Early. Nothing is published to npm yet, and there is no component to install.
 
 What exists:
 
-- `@sheetcn/core`: the column schema, 14 column types with a registry for your own, cell values (parse, format, validate, compare, filter), a row store with transactions and undo, selection geometry and the key map. `@sheetcn/core/phone` adds full phone number handling through libphonenumber-js.
+- `@sheetcn/core`: the column schema, 14 column types with a registry for your own, cell values (parse, format, validate, compare, filter), views that filter, sort and group rows, a row store with transactions and undo, selection geometry and the key map. `@sheetcn/core/phone` adds full phone number handling through libphonenumber-js.
 - `@sheetcn/react`: `useSheet`, which wires the store to TanStack Table cell selection and TanStack Virtual, with keyboard commands, editing, pointer selection, focus, and column sizing with fit to content.
 - [The playground](apps/playground): a minimal grid on the binding at 100,000 rows, with the measurement harness.
 
 What is next:
 
+- Views in the grid: the filter bar with its chips, sort and group, and hidden columns.
 - Clipboard: copy, cut and paste.
 - Fill.
 - The shadcn registry, with the `table` and `sheet` grid views.
@@ -265,7 +274,7 @@ The built-in types (`builtInTypes`). Every type reads `""` as empty (`text` keep
 | `phone`      | E.164, `+442079460958`                             | the number with its country code; spaces, dots, dashes and brackets are dropped and `00` reads as `+`. It needs 7 to 15 digits. With the adapter below, national numbers and a check that the number can exist.                        | as stored, or in groups with the adapter                 | typing                                             | `defaultCountry` (adapter only)                                                                   |
 | `country`    | an ISO 3166-1 alpha-2 code, `"NO"`                 | the code, the alpha-3 code or the name, in the column's language or English, ignoring case and accents; `UK` reads as GB. Only the 249 assigned codes are countries.                                                                   | the name in the column's language, `Norway`              | typing, or a list the view draws (`edit: "popup"`) | `locale` (default `"en"`), `showCode` (`Norway (NO)`)                                             |
 
-Every type also orders its values (`compareCells`, with empty cells last) and has filters (`filterCell`); there is no sort or filter in the grid yet. The orders: text, email, URL, domain and phone as words, numbers, percents and money by value, dates by day, select by the order of its options, `false` before `true`, identifiers by code point with digit runs as numbers (`A-9` before `A-10`), countries by name.
+Every type also orders its values (`compareCells`, with empty cells last) and has filters (`filterCell`), which a [view](#views-filter-sort-and-group) uses to filter, sort and group rows. The orders: text, email, URL, domain and phone as words, numbers, percents and money by value, dates by day, select by the order of its options, `false` before `true`, identifiers by code point with digit runs as numbers (`A-9` before `A-10`), countries by name.
 
 **Money.** The amount is a plain number, so rows stay plain; the currency belongs to the column. The text is the same for display, copy and editing, in one fixed style (grouping commas and a decimal point, as `€1,234.50`, `DKK 1,234.50` and `¥1,235`), because `parse` must read back what `format` writes; there is no locale option yet. A single comma group (`1,234`) reads as thousands, except in a currency with three decimals, where it is ambiguous. `currencyFrom: (row) => row.currency` shows each row in its own currency, for display only: parsing, copying and editing use `currency`. Being a function, it is left out of the column's spec.
 
@@ -284,7 +293,9 @@ const columns = types.defineColumns<Contact>((c) => [
 ])
 ```
 
-**Filters.** Each type lists its filters, `{ id, label, operands, test }`. `operands` is how many texts the user gives: 0 ("is empty"), 1 ("contains"), 2 ("between") or `"many"` ("is any of"); `test` reads them, usually with the type's own parse, so `filterCell(price, "lessThan", value, ["€10"])` works in a euro column. The built-in filters: `contains`, `is`, `startsWith`, `isAnyOf`, `equals`, `lessThan`, `greaterThan` and `between` (shown as "before" and "after" for dates), `domainIs` for email, `hostIs` for URLs, and `empty` for every type. A domain `is` matches its subdomains too.
+**Filters.** Each type lists its filters in the order a menu shows them, the likely one first: `{ id, label, notLabel, operands, compile }`. `operands` is how many texts the user gives: 0 ("is empty"), 1 ("contains"), 2 ("between") or `"many"` ("is any of", one or more). `compile(operands, prepared, env)` reads the texts once, usually with the type's own parse, and returns the test for one cell, or an error when they do not parse; `env.today` is today's date, for relative dates. A filter that also has `text(value, prepared)` matches words: its test gets the cell's text folded (`foldText`: case and accents removed), which is kept with the rows, so a filter typed letter by letter folds each cell once. `notLabel` names the negation a menu lists, such as "does not contain". `filterCell(column, id, value, operands)` runs one filter on one value, so `filterCell(price, "lessThan", value, ["€10"])` works in a euro column.
+
+The built-in filters: `contains`, `is` and `startsWith` for text (`contains` for long text, email and phone; `is` and `startsWith` for identifiers and phone), `isAnyOf` for select and country, `equals`, `lessThan`, `greaterThan` and `between` for numbers, percents, money and dates (shown as "is", "less than", "greater than" and "between", and "before" and "after" for dates), `inLast`, `inNext` and `within` for dates, `domainIs` for email, `hostIs` for URLs, `is` for booleans and domains (a domain matches its subdomains too), and `empty` for every type. The builders (`containsFilter`, `isTextFilter`, `startsWithFilter`, `anyOfFilter`, `orderFilters`, `relativeDateFilters`, `emptyFilter`) are exported for types of your own.
 
 **A type of your own** is one object, `defineColumnType`, with no DOM in it:
 
@@ -369,6 +380,48 @@ const store = createSheetStore<Item>({ types, columns, rows, getRowId })
     setData((data) => applyChange(data, change, { columns, getRowId }))
   // and on each render: store.setRows(data)
   ```
+
+### Views: filter, sort and group
+
+```ts
+import {
+  countRows,
+  createViewModel,
+  viewsEqual,
+  type SheetView,
+} from "@sheetcn/core"
+
+const needsReview: SheetView = {
+  filter: {
+    match: "all",
+    items: [
+      { column: "status", op: "isAnyOf", values: ["review"] },
+      {
+        match: "any",
+        items: [
+          { column: "score", op: "lessThan", values: ["0.6"] },
+          { column: "owner", op: "empty", values: [] },
+        ],
+      },
+    ],
+  },
+  sort: [{ column: "score", dir: "asc" }],
+}
+
+const model = createViewModel({ columns, getRowId, view: needsReview })
+const { rows: shown, groups } = model.compute(store.getRows())
+
+countRows(store.getRows(), columns, needsReview) // for a count on a tab
+viewsEqual(current, needsReview) // false once the view is edited
+```
+
+- A `SheetView` is plain data: `filter`, `sort`, `group` and `hidden` (column ids), every part optional. It survives JSON, so an app can keep views in the address bar, in local storage or in its database. Saved views belong to the app; the core gives the view and `viewsEqual`, which treats a missing part as an empty one and hidden columns as a set, so an app can mark a saved view as edited.
+- Values are texts, read by the column's type the same way typed text is: `"80%"` in a percent column, `"Needs review"` or `"review"` in a select.
+- A filter is a tree. A group matches `"all"` or `"any"` of its items, which are conditions or groups, to any depth. `not: true` turns any filter around ("does not contain" is `contains` with `not`), and passes empty cells. A condition that cannot apply (an unknown column or filter, a missing value, a value that does not parse) is skipped, never guessed, and listed in `issues` with its place in the tree; a group left with nothing that applies drops out.
+- Relative dates: `inLast` and `inNext` take a count and a unit (`["7", "days"]`; days, weeks, months or years), and "in the last 7 days" is today and the 6 days before it. `within` takes a calendar period: `thisWeek`, `lastWeek`, `nextWeek` and the same for months and years; weeks start on Monday. `today`, `yesterday` and `tomorrow` work as the value of "is", "before", "after" and "between". They are kept as words, so a saved view stays current. Today is the local date when the model is made, or the `today` option.
+- `sort` is a list of keys, the first deciding first, each `"asc"` or `"desc"`; empty cells go last either way, and ties keep the rows' order. `group` takes one column (a date by `"day"`, `"month"` or `"year"`); groups follow the column's order, reversed when a sort on the same column is descending, with empty cells last. Each group has its `value`, `label`, `start` and `size`, which a grid draws as a header with a count.
+- `compute(rows)` returns the rows shown, in order, and the groups; `sourceIndex(position)` and `indexOf(rowId)` map between the view and the rows. With nothing to filter, sort or group, the rows come back as they are.
+- Speed: `compileFilter` reads each condition's values once, not per cell. Folded text and each sort column's ranks are built on first use and kept with the rows array, and `applyChange` hands them on as it does the row index, so typing a filter or flipping a sort does not fold or compare again. After a patch-only change, `compute` tests only the replaced rows again and moves them to where they now belong; inserts, removes and changes of more than 64 rows are worked out afresh.
 
 ### Selection and the key map
 

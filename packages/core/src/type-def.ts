@@ -87,8 +87,9 @@ export type ColumnTypeDef<
    */
   compare?(this: void, a: V, b: V, prepared: P): number
   /**
-   * The ways to filter the column's cells, such as "contains" or "between".
-   * No filter UI ships yet; `filterCell` runs one.
+   * The ways to filter the column's cells, such as "contains" or "between",
+   * in the order a filter menu lists them: the likely one first. A view's
+   * filter names them by id (`compileFilter`); `filterCell` runs one.
    */
   filters?: readonly FilterOp<V, P>[]
   /** Default: "text". */
@@ -97,25 +98,81 @@ export type ColumnTypeDef<
   align?: "start" | "end"
 }
 
+/** What a filter may read besides the cell. */
+export type FilterEnv = {
+  /** Today's date in ISO form ("2026-10-27"), for relative dates. */
+  today: string
+}
+
 /**
- * One way to filter a column. `operands` is how many texts the user gives:
- * none ("is empty"), one ("contains"), two ("between") or any number ("is
- * any of"). `test` reads the operand texts itself, usually with the type's
- * own parse, and gets empty cells as `null`.
+ * A compiled filter's test for one cell. It is typed as a method, so that
+ * filters of different value types fit one registry.
  */
-export type FilterOp<V extends CellValue = CellValue, P = unknown> = {
+export type CellTest<T> = {
+  test(this: void, cell: T): boolean
+}["test"]
+
+type FilterOpBase = {
   /** Unique within the type, such as "contains". */
   id: string
   /** The words for people, such as "contains". */
   label: string
+  /**
+   * The words for the filter turned around, such as "does not contain". A
+   * filter menu lists the negation when this is set; any filter can be
+   * turned around in a view (`not`), with or without it.
+   */
+  notLabel?: string
+  /**
+   * How many texts the user gives: none ("is empty"), one ("contains"), two
+   * ("between") or one or more ("is any of").
+   */
   operands: 0 | 1 | 2 | "many"
-  test(
-    this: void,
-    value: V | null,
-    operands: readonly string[],
-    prepared: P
-  ): boolean
 }
+
+/**
+ * A filter that tests the stored value. `compile` reads the operand texts
+ * once, usually with the type's own parse, and returns the test, which gets
+ * empty cells as `null`; or an error when the texts do not parse, so the
+ * filter is skipped rather than guessed. It gets exactly `operands` texts
+ * (at least one for "many"), none of them blank.
+ */
+export type ValueFilterOp<
+  V extends CellValue = CellValue,
+  P = unknown,
+> = FilterOpBase & {
+  text?: undefined
+  compile(
+    this: void,
+    operands: readonly string[],
+    prepared: P,
+    env: FilterEnv
+  ): ParseResult<CellTest<V | null>>
+}
+
+/**
+ * A filter that matches a value's words, ignoring case and accents, such as
+ * "contains". `text` gives the words of a value (its label, say), and the
+ * test gets them folded (see `foldText`), or `null` for an empty cell. The
+ * folded text is kept per column with the rows, so a filter typed letter by
+ * letter folds each cell once.
+ */
+export type TextFilterOp<
+  V extends CellValue = CellValue,
+  P = unknown,
+> = FilterOpBase & {
+  text(this: void, value: V, prepared: P): string
+  compile(
+    this: void,
+    operands: readonly string[],
+    prepared: P,
+    env: FilterEnv
+  ): ParseResult<CellTest<string | null>>
+}
+
+/** One way to filter a column. */
+export type FilterOp<V extends CellValue = CellValue, P = unknown> =
+  ValueFilterOp<V, P> | TextFilterOp<V, P>
 
 /** A definition of any value, options and prepared state. */
 export type AnyColumnTypeDef = ColumnTypeDef<

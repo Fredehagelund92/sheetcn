@@ -7,7 +7,9 @@ import {
   isTextFilter,
   noOptions,
   orderFilters,
+  startsWithFilter,
 } from "./column-types/shared.js"
+import { readDateOperand, relativeDateFilters } from "./column-types/dates.js"
 import { countryType } from "./column-types/country.js"
 import { moneyType, percentType } from "./column-types/numeric.js"
 import { phoneShapeType } from "./column-types/phone.js"
@@ -45,7 +47,12 @@ export const textType = defineColumnType({
   format: (value: string) => asText(value),
   validate: (value) => (typeof value === "string" ? null : NOT_TEXT),
   compare: (a, b) => collator.compare(a, b),
-  filters: [containsFilter(), isTextFilter(), emptyFilter()],
+  filters: [
+    containsFilter(),
+    isTextFilter(),
+    startsWithFilter(),
+    emptyFilter(),
+  ],
 })
 
 /**
@@ -79,10 +86,8 @@ export const dateType = defineColumnType({
   // ISO dates sort as text.
   compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
   filters: [
-    ...orderFilters((text) => parseDate(text), {
-      lt: "before",
-      gt: "after",
-    }),
+    ...relativeDateFilters(),
+    ...orderFilters(readDateOperand, { lt: "before", gt: "after" }),
     emptyFilter(),
   ],
 })
@@ -101,10 +106,13 @@ export const booleanType = defineColumnType({
     {
       id: "is",
       label: "is",
+      notLabel: "is not",
       operands: 1,
-      test: (value, [text = ""]) => {
+      compile: ([text = ""]) => {
         const parsed = parseBoolean(text)
-        return value !== null && parsed.ok && parsed.value === value
+        if (!parsed.ok) return parsed
+        const want = parsed.value
+        return ok((value) => value !== null && value === want)
       },
     },
     emptyFilter(),
