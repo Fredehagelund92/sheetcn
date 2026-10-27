@@ -1,7 +1,13 @@
-import { defineColumns } from "@sheetcn/core"
+import { builtInTypes, createTypeRegistry } from "@sheetcn/core"
+import { phoneType } from "@sheetcn/core/phone"
 
-// Generic demo rows, seeded so every load is the same: 20 columns of the
-// five column types.
+// Generic demo rows, seeded so every load is the same: 20 columns across the
+// built-in column types. Phone numbers use the libphonenumber-js adapter.
+
+export const types = createTypeRegistry([
+  ...builtInTypes.filter((t) => t.id !== "phone"),
+  phoneType,
+])
 
 export type Item = {
   id: string
@@ -15,15 +21,15 @@ export type Item = {
   ordered: string | null
   shipped: string | null
   inStock: boolean | null
-  city: string | null
+  country: string | null
   email: string | null
-  owner: string | null
+  phone: string | null
   rating: number | null
-  weight: number | null
+  website: string | null
   region: string | null
   priority: string | null
   notes: string | null
-  updated: string | null
+  supplier: string | null
 }
 
 const ADJECTIVES = [
@@ -50,32 +56,27 @@ const NOUNS = [
   "Speaker",
   "Cable",
 ]
-const CITIES = [
-  "Lisbon",
-  "Oslo",
-  "Austin",
-  "Lyon",
-  "Osaka",
-  "Porto",
-  "Nairobi",
-  "Quito",
-  "Perth",
-  "Turin",
+const COUNTRIES = ["PT", "NO", "US", "FR", "JP", "KE", "EC", "AU", "IT", "DK"]
+const SUPPLIERS = [
+  "oakworks.example",
+  "northwind-tools.example",
+  "brightline.example",
+  "kettle.example",
+  "steelyard.example",
 ]
-const OWNERS = ["Team A", "Team B", "Team C", "Ops", "Sales", "Support"]
 const NOTES = [
   null,
   "Check stock before shipping",
   "Gift wrap",
-  "Fragile",
-  "Bulk order, call first",
+  "Fragile\nKeep it upright",
+  "Bulk order, call first\nAsk for the warehouse\nNot before 9:00",
   "Return requested",
 ]
 
 const options = (...labels: string[]) =>
   labels.map((label) => ({ value: label.toLowerCase(), label }))
 
-export const columns = defineColumns<Item>((c) => [
+export const columns = types.defineColumns<Item>((c) => [
   c.text("name", {
     header: "Name",
     width: 200,
@@ -99,10 +100,10 @@ export const columns = defineColumns<Item>((c) => [
     width: 110,
     options: options("Draft", "Active", "Paused", "Archived"),
   }),
-  c.number("price", {
+  c.money("price", {
     header: "Price",
     width: 100,
-    format: (v) => v.toFixed(2),
+    currency: "USD",
     validate: (v) =>
       v !== null && v < 0 ? { message: "Price cannot be negative" } : null,
   }),
@@ -114,12 +115,7 @@ export const columns = defineColumns<Item>((c) => [
         ? { message: "Quantity must be a whole number, 0 or more" }
         : null,
   }),
-  c.number("discount", {
-    header: "Discount",
-    width: 100,
-    // Whole and fractional percents both read back: "12.5%" parses to 0.125.
-    format: (v) => `${Number((v * 100).toFixed(4))}%`,
-  }),
+  c.percent("discount", { header: "Discount", width: 100 }),
   c.date("ordered", { header: "Ordered", width: 120 }),
   c.date("shipped", {
     header: "Shipped",
@@ -130,23 +126,16 @@ export const columns = defineColumns<Item>((c) => [
         : null,
   }),
   c.boolean("inStock", { header: "In stock", width: 100 }),
-  c.text("city", { header: "City", width: 120 }),
-  c.text("email", {
-    header: "Contact email",
-    width: 220,
-    validate: (v) =>
-      v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)
-        ? { message: "Not an email address" }
-        : null,
-  }),
-  c.text("owner", { header: "Owner", width: 110 }),
+  c.country("country", { header: "Country", width: 120 }),
+  c.email("email", { header: "Contact email", width: 220 }),
+  c.phone("phone", { header: "Phone", width: 150, defaultCountry: "GB" }),
   c.number("rating", {
     header: "Rating",
     width: 80,
     validate: (v) =>
       v !== null && (v < 1 || v > 5) ? { message: "Rating is 1 to 5" } : null,
   }),
-  c.number("weight", { header: "Weight kg", width: 100 }),
+  c.url("website", { header: "Website", width: 250 }),
   c.select("region", {
     header: "Region",
     width: 100,
@@ -157,9 +146,9 @@ export const columns = defineColumns<Item>((c) => [
     width: 100,
     options: options("Low", "Medium", "High"),
   }),
-  c.text("notes", { header: "Notes", width: 260 }),
-  c.date("updated", { header: "Updated", width: 120 }),
-  c.text("rowId", { header: "ID", width: 90, value: (r) => r.id }),
+  c.longtext("notes", { header: "Notes", width: 260 }),
+  c.domain("supplier", { header: "Supplier", width: 190 }),
+  c.identifier("rowId", { header: "ID", width: 90, value: (r) => r.id }),
 ])
 
 export const getRowId = (row: Item) => row.id
@@ -197,6 +186,8 @@ export function makeItems(count: number, seed = 7): Item[] {
   const out: Item[] = []
   for (let i = 0; i < count; i++) {
     const ordered = Math.floor(r() * 280)
+    // Each field draws from the seed as the fields it replaced did, so the
+    // other columns keep their values.
     out.push({
       id: `r${pad(i + 1, 6)}`,
       name: `${pick(ADJECTIVES)} ${pick(NOUNS)} ${pad(i + 1, 6)}`,
@@ -209,15 +200,16 @@ export function makeItems(count: number, seed = 7): Item[] {
       ordered: day(base, ordered),
       shipped: r() < 0.8 ? day(base, ordered + Math.floor(r() * 14)) : null,
       inStock: r() < 0.7,
-      city: pick(CITIES),
+      country: pick(COUNTRIES),
       email: `orders${pad(i % 997, 3)}@example.com`,
-      owner: pick(OWNERS),
+      // Numbers in a range set aside for drama, so none is a real line.
+      phone: `+442079460${pad(Math.floor(r() * 1000), 3)}`,
       rating: 1 + Math.floor(r() * 5),
-      weight: Math.round(r() * 5000) / 100,
+      website: `https://${pick(SUPPLIERS)}/p/${pad(i + 1, 6)}`,
       region: pick(regions),
       priority: pick(priorities),
       notes: pick(NOTES),
-      updated: day(base, 280 + Math.floor(r() * 20)),
+      supplier: pick(SUPPLIERS),
     })
   }
   return out

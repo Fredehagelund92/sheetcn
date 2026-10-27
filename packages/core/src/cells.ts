@@ -1,6 +1,8 @@
-import { builtInTypes, collator } from "./built-in-types.js"
+import { builtInTypes } from "./built-in-types.js"
+import { collator, isList, listsEqual } from "./column-types/shared.js"
 import type { AnyColumnTypeDef } from "./type-def.js"
 import type { CellValue, Column, Issue, ParseResult } from "./types.js"
+import { valueIndexFor, valueKey } from "./value-index.js"
 
 /** A column's type, resolved: its definition, options and prepared state. */
 export type ResolvedType = {
@@ -62,32 +64,69 @@ export function parseCell<Row>(
   return def.parse(text, prepared)
 }
 
-/** A cell value to text for display and copy. Empty cells format as "". */
-export function formatCell<Row>(column: Column<Row>, value: CellValue): string {
+/**
+ * A cell value to text for display and copy. Empty cells format as "".
+ * Pass the row for display, so a type can show it per row (a money column's
+ * `currencyFrom`); copy and editing pass none.
+ */
+export function formatCell<Row>(
+  column: Column<Row>,
+  value: CellValue,
+  row?: Row
+): string {
   if (value === null) return ""
   if (column.format) return column.format(value)
   const { def, prepared } = resolveColumnType(column)
-  return def.format(value, prepared)
+  return def.format(value, prepared, row)
 }
 
 /**
- * Checks a stored value: first with the column's type, then with the
- * column's own `validate`. Empty cells pass the type check.
+ * Checks a cell: first with the column's type (its `validateEmpty` for an
+ * empty cell), then, for a type whose values are `unique`, against the rest
+ * of the column, then with the column's own `validate`. The uniqueness check
+ * needs `rows`, the rows `row` is one of; it flags a repeat with another row
+ * that holds the value: "Also in row 12" (positions count from 1). It keeps
+ * an index of the column's values with the rows array, which a commit
+ * patches rather than rebuilds.
  */
 export function validateCell<Row>(
   column: Column<Row>,
   value: CellValue,
-  row: Row
+  row: Row,
+  rows?: readonly Row[]
 ): Issue | null {
-  if (value !== null) {
-    const { def, prepared } = resolveColumnType(column)
-    const issue = def.validate?.(value, prepared, row) ?? null
-    if (issue) return issue
-  }
+  const { def, prepared } = resolveColumnType(column)
+  const issue =
+    value === null
+      ? (def.validateEmpty?.(prepared, row) ?? null)
+      : (def.validate?.(value, prepared, row) ??
+        (def.unique && rows ? repeatIssue(column, value, row, rows) : null))
+  if (issue) return issue
   return column.validate ? column.validate(value, row) : null
 }
 
-/** Whether two values of the column are the same, by its type's `equals`. */
+function repeatIssue<Row>(
+  column: Column<Row>,
+  value: CellValue,
+  row: Row,
+  rows: readonly Row[]
+): Issue | null {
+  const holders = valueIndexFor(rows, column).get(valueKey(value))
+  if (!holders || holders.size < 2) return null
+  let first = Infinity
+  for (const other of holders) {
+    if (other === row) continue
+    const at = rows.indexOf(other as Row)
+    if (at >= 0 && at < first) first = at
+  }
+  return first === Infinity ? null : { message: `Also in row ${first + 1}` }
+}
+
+/**
+ * Whether two values of the column are the same, by its type's `equals`.
+ * Without one, lists are the same when their items are, and other values
+ * when `Object.is` says so.
+ */
 export function cellsEqual<Row>(
   column: Column<Row>,
   a: CellValue,
@@ -95,7 +134,8 @@ export function cellsEqual<Row>(
 ): boolean {
   if (a === null || b === null) return a === b
   const { equals } = resolveColumnType(column).def
-  return equals ? equals(a, b) : Object.is(a, b)
+  if (equals) return equals(a, b)
+  return isList(a) && isList(b) ? listsEqual(a, b) : Object.is(a, b)
 }
 
 /**
@@ -111,4 +151,24 @@ export function compareCells<Row>(
   const { def, prepared } = resolveColumnType(column)
   if (def.compare) return def.compare(a, b, prepared)
   return collator.compare(formatCell(column, a), formatCell(column, b))
+}
+
+/**
+ * Runs one of the type's filters on a value: whether the cell passes. Throws
+ * when the type has no filter with that id.
+ */
+export function filterCell<Row>(
+  column: Column<Row>,
+  filterId: string,
+  value: CellValue,
+  operands: readonly string[] = []
+): boolean {
+  const { def, prepared } = resolveColumnType(column)
+  const filter = def.filters?.find((f) => f.id === filterId)
+  if (!filter) {
+    throw new Error(
+      `Column "${column.id}" (${def.label}) has no filter "${filterId}"`
+    )
+  }
+  return filter.test(value, operands, prepared)
 }

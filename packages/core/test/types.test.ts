@@ -19,8 +19,10 @@ import {
   type Column,
   type ColumnSpec,
   type ColumnType,
+  numberType,
   type TypeHelpers,
 } from "../src/index.js"
+import { COUNTRY_CODES } from "../src/column-types/country-codes.js"
 
 type Row = {
   id: string
@@ -82,14 +84,23 @@ const [name, stars, price, code] = columns as [
 describe("createTypeRegistry", () => {
   it("looks types up by id and keeps their order", () => {
     expect(types.get("rating")).toBe(rating)
-    expect(types.get("number")).toBe(builtInTypes[1])
+    expect(types.get("number")).toBe(numberType)
     expect(types.get("missing")).toBeUndefined()
     expect(types.definitions.map((d) => d.id)).toEqual([
       "text",
+      "longtext",
       "number",
+      "percent",
+      "money",
       "date",
       "select",
       "boolean",
+      "identifier",
+      "email",
+      "url",
+      "domain",
+      "phone",
+      "country",
       "rating",
       "tag",
     ])
@@ -151,7 +162,7 @@ describe("a registry's helpers", () => {
     expect(typeof check).toBe("function")
     expectTypeOf<
       TypeHelpers<Row, typeof types.definitions>
-    >().not.toHaveProperty("money")
+    >().not.toHaveProperty("tags")
   })
 
   it("throw for an unknown option or a missing required option", () => {
@@ -236,10 +247,19 @@ describe("edit and align hints", () => {
     const hints = builtInTypes.map((d) => [d.id, d.edit, d.align])
     expect(hints).toEqual([
       ["text", undefined, undefined],
+      ["longtext", "popup", undefined],
       ["number", undefined, "end"],
+      ["percent", undefined, "end"],
+      ["money", undefined, "end"],
       ["date", undefined, undefined],
       ["select", "popup", undefined],
       ["boolean", "toggle", undefined],
+      ["identifier", undefined, undefined],
+      ["email", undefined, undefined],
+      ["url", undefined, undefined],
+      ["domain", undefined, undefined],
+      ["phone", undefined, undefined],
+      ["country", "popup", undefined],
     ])
   })
 })
@@ -412,9 +432,9 @@ describe("column specs", () => {
 
   it("refuse an unknown type or options the type rejects", () => {
     expect(() =>
-      types.fromSpec({ id: "m", header: "M", type: "money" })
+      types.fromSpec({ id: "m", header: "M", type: "tags" })
     ).toThrow(
-      'Column "m" has the type "money", which this registry does not include'
+      'Column "m" has the type "tags", which this registry does not include'
     )
     expect(() =>
       types.fromSpec({
@@ -448,6 +468,15 @@ const optionList = fc
   )
   .filter((list) => new Set(list.map((o) => o.label)).size === list.length)
 
+/** What a type stores for some text, or null when the text does not parse. */
+function canonical(type: string, text: string): string | null {
+  const parsed = parseCell(
+    types.fromSpec<Row>({ id: "x", header: "X", type }),
+    text
+  )
+  return parsed.ok && typeof parsed.value === "string" ? parsed.value : null
+}
+
 type Case = fc.Arbitrary<{
   typeOptions?: Record<string, unknown>
   value: CellValue
@@ -477,6 +506,80 @@ const roundTrips: Record<string, Case> = {
       value: o?.value ?? null,
     }))
   ),
+  longtext: values(
+    fc
+      .string({ unit: "grapheme", minLength: 1 })
+      .map((v) => v.replace(/\r\n?/g, "\n"))
+      .filter((v) => v !== "")
+  ),
+  percent: values(
+    fc
+      .double({ noNaN: true, noDefaultInfinity: true })
+      .map((v) => (v === 0 ? 0 : v))
+  ),
+  money: fc
+    .constantFrom(
+      ["USD", 2],
+      ["EUR", 2],
+      ["JPY", 0],
+      ["KWD", 3],
+      ["DKK", 2],
+      ["CHF", 2]
+    )
+    .chain(([currency, digits]) =>
+      nullable(
+        fc
+          .integer({ min: -1e11, max: 1e11 })
+          .map((minor) => minor / 10 ** (digits as number))
+          .map((v) => (v === 0 ? 0 : v))
+      ).map((value) => ({ typeOptions: { currency }, value }))
+    ),
+  identifier: fc
+    .constantFrom("keep", "upper", "lower")
+    .chain((letterCase) =>
+      nullable(
+        fc
+          .stringMatching(/^[A-Za-z0-9_-]{1,16}$/)
+          .map((v) =>
+            letterCase === "upper"
+              ? v.toUpperCase()
+              : letterCase === "lower"
+                ? v.toLowerCase()
+                : v
+          )
+      ).map((value) => ({ typeOptions: { case: letterCase }, value }))
+    ),
+  email: values(
+    fc.stringMatching(/^[a-z0-9._%+-]{1,12}@[a-z0-9]{1,10}\.[a-z]{2,6}$/)
+  ),
+  url: values(
+    fc
+      .webUrl({
+        validSchemes: ["http", "https"],
+        withQueryParameters: true,
+        withFragments: true,
+      })
+      .map((u) => canonical("url", u))
+      .filter((v): v is string => v !== null)
+  ),
+  domain: values(
+    fc
+      .domain()
+      .map((d) => canonical("domain", d))
+      .filter((v): v is string => v !== null)
+  ),
+  phone: values(fc.stringMatching(/^\+\d{7,15}$/)),
+  country: fc
+    .record({
+      locale: fc.constantFrom("en", "de", "fr", "ja", "da"),
+      showCode: fc.boolean(),
+    })
+    .chain((typeOptions) =>
+      nullable(fc.constantFrom(...COUNTRY_CODES.keys())).map((value) => ({
+        typeOptions,
+        value,
+      }))
+    ),
   rating: fc.integer({ min: 1, max: 20 }).chain((max) =>
     nullable(fc.integer({ min: 1, max })).map((value) => ({
       typeOptions: { max },

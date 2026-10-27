@@ -60,14 +60,24 @@ export function assertColumns<Row>(
   }
 }
 
-/** The plain-data part of a column, for persistence and history. */
+/**
+ * The plain-data part of a column, for persistence and history. Type options
+ * that are functions (a money column's `currencyFrom`) stay on the column.
+ */
 export function toColumnSpec<Row>(column: Column<Row>): ColumnSpec {
   const spec: ColumnSpec = {
     id: column.id,
     header: column.header,
     type: column.type,
   }
-  if (column.typeOptions !== undefined) spec.typeOptions = column.typeOptions
+  if (column.typeOptions !== undefined) {
+    const entries = Object.entries(column.typeOptions)
+    const data = entries.filter(([, v]) => typeof v !== "function")
+    spec.typeOptions =
+      data.length === entries.length
+        ? column.typeOptions
+        : Object.fromEntries(data)
+  }
   if (column.width !== undefined) spec.width = column.width
   if (column.minWidth !== undefined) spec.minWidth = column.minWidth
   if (column.maxWidth !== undefined) spec.maxWidth = column.maxWidth

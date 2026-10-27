@@ -1,10 +1,27 @@
 import type { AnyColumnTypeDef } from "./type-def.js"
 
-/** A value stored in one cell. Dates are ISO strings ("2026-03-01"). */
-export type CellValue = string | number | boolean | null
+/**
+ * A value stored in one cell. Dates are ISO strings ("2026-03-01"). A list
+ * holds strings only, such as the option values of a multi-choice type.
+ */
+export type CellValue = string | number | boolean | readonly string[] | null
 
 /** The ids of the types every registry can start from (`builtInTypes`). */
-export type BuiltInTypeId = "text" | "number" | "date" | "select" | "boolean"
+export type BuiltInTypeId =
+  | "text"
+  | "longtext"
+  | "number"
+  | "percent"
+  | "money"
+  | "date"
+  | "select"
+  | "boolean"
+  | "identifier"
+  | "email"
+  | "url"
+  | "domain"
+  | "phone"
+  | "country"
 
 /** A column's type id: a built-in one, or one a registry defines. */
 export type ColumnType = BuiltInTypeId | (string & {})

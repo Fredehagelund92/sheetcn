@@ -1,5 +1,6 @@
 import { handOverIndex, indexFor } from "./row-index.js"
 import type { Change, Column, InsertedRow, Patch } from "./types.js"
+import { handOverValueIndexes } from "./value-index.js"
 
 /** What applying a change needs to know about the rows. */
 export type ChangeContext<Row> = {
@@ -134,12 +135,17 @@ export function applyChange<Row>(
   if (!inserted.length && !change.removedRowIds?.length) {
     const index = indexFor(rows)
     const next = rows.slice()
+    const patched = new Set<number>()
     for (const patch of change.patches) {
       const p = index.indexOf(rows, ctx.getRowId, patch.rowId)
       if (p < 0) throw new Error(`There is no row "${patch.rowId}"`)
       next[p] = writePatch(next[p] as Row, patch, ctx)
+      patched.add(p)
     }
     handOverIndex(rows, next)
+    handOverValueIndexes(rows, next, () =>
+      [...patched].map((p) => [rows[p], next[p]] as const)
+    )
     return next
   }
 
@@ -166,6 +172,30 @@ export function applyChange<Row>(
     next = merged.filter((_, i) => !drop.has(i))
     for (const i of drop) stale = Math.min(stale, i)
   }
+  handOverValueIndexes(rows, next, () => {
+    // Each row the change touched, as it was and as it is now.
+    const touched = new Map<
+      string,
+      readonly [Row | undefined, Row | undefined]
+    >()
+    const was = (id: string) =>
+      positions.isInserted(id)
+        ? undefined
+        : rows[indexFor(rows).indexOf(rows, ctx.getRowId, id)]
+    const now = (id: string) =>
+      removed.has(id) ? undefined : merged[positions.require(id)]
+    for (const { row } of inserted) {
+      const id = ctx.getRowId(row)
+      touched.set(id, [undefined, now(id)])
+    }
+    for (const id of [
+      ...change.patches.map((p) => p.rowId),
+      ...removed.keys(),
+    ]) {
+      if (!touched.has(id)) touched.set(id, [was(id), now(id)])
+    }
+    return touched.values()
+  })
   const index = handOverIndex(rows, next, stale)
   for (const id of removed.keys()) index.positions.delete(id)
   return next

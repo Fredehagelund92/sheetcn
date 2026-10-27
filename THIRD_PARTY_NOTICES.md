@@ -10,6 +10,8 @@ This file lists third-party code that ships to users in the published packages, 
 
 React and React DOM are peer dependencies: the app installs them, and they are not shipped with sheetcn.
 
+The phone adapter entry, `@sheetcn/core/phone`, uses [libphonenumber-js](https://github.com/catamphetamine/libphonenumber-js) 1.13.15 (MIT). It is an optional peer dependency: an app that imports the adapter installs it, and it is not shipped with sheetcn. The main `@sheetcn/core` entry does not use it.
+
 When a runtime dependency is added, or code is copied from another project, add an entry here with:
 
 - the project name, its source URL and the version or commit,

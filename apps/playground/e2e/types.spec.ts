@@ -66,3 +66,55 @@ test("a select cell takes an option's label", async ({ page }) => {
   await page.keyboard.press("Enter")
   await expect(category).toHaveText("Software")
 })
+
+const PRICE_ROW = 0
+const COUNTRY = 10
+const PHONE = 12
+const NOTES = 17
+
+/** Opens the active cell's editor by typing, then commits with Enter. */
+async function enter(page: Page, text: string) {
+  await page.keyboard.type(text)
+  await page.keyboard.press("Enter")
+}
+
+test("money keeps to its currency and shows it", async ({ page }) => {
+  const price = cell(page, PRICE_ROW, PRICE)
+  await price.click()
+  await enter(page, "EUR 5")
+  await expect(grid(page).getByRole("alert")).toHaveText(
+    '"EUR 5" is not in USD'
+  )
+  await page.keyboard.press("Escape")
+  await enter(page, "1234.5")
+  await expect(price).toHaveText("$1,234.50")
+})
+
+test("country and phone read what people type", async ({ page }) => {
+  const country = cell(page, 0, COUNTRY)
+  await country.click()
+  await enter(page, "nor")
+  await expect(country).toHaveText("Norway")
+  const phone = cell(page, 0, PHONE)
+  await phone.click()
+  await enter(page, "020 7946 0123")
+  await expect(phone).toHaveText("+44 20 7946 0123")
+})
+
+test("long text takes several lines and shows the first", async ({ page }) => {
+  // Notes is off screen: go to the row's end (ID) and two cells back.
+  await cell(page, 0, 0).click()
+  await page.keyboard.press("End")
+  await page.keyboard.press("ArrowLeft")
+  await page.keyboard.press("ArrowLeft")
+  const notes = cell(page, 0, NOTES)
+  await expect(notes).toHaveAttribute("tabindex", "0")
+  await page.keyboard.press("Enter")
+  const editor = grid(page).getByRole("textbox", { name: "Edit Notes" })
+  await editor.fill("First line")
+  await page.keyboard.press("Alt+Enter")
+  await page.keyboard.type("Second line")
+  await expect(editor).toHaveValue("First line\nSecond line")
+  await page.keyboard.press("Enter")
+  await expect(notes).toHaveText("First line ...")
+})

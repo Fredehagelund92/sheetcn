@@ -1,3 +1,23 @@
+import {
+  anyOfFilter,
+  asText,
+  collator,
+  containsFilter,
+  emptyFilter,
+  isTextFilter,
+  noOptions,
+  orderFilters,
+} from "./column-types/shared.js"
+import { countryType } from "./column-types/country.js"
+import { moneyType, percentType } from "./column-types/numeric.js"
+import { phoneShapeType } from "./column-types/phone.js"
+import {
+  domainType,
+  emailType,
+  identifierType,
+  longTextType,
+  urlType,
+} from "./column-types/text.js"
 import { defineColumnType } from "./type-def.js"
 import type { SelectOption } from "./types.js"
 import {
@@ -9,20 +29,11 @@ import {
   parseSelect,
 } from "./values.js"
 
-/** Orders text as words in the host's language, as people read it. */
-export const collator = new Intl.Collator()
-
-const noOptions: object = {}
-
 const NOT_TEXT = { message: "Not text" }
 const NOT_NUMBER = { message: "Not a number" }
 const NOT_DATE = { message: "Not a date in YYYY-MM-DD form" }
 const NOT_BOOLEAN = { message: "Not yes or no" }
 const NOT_AN_OPTION = { message: "Not one of the options" }
-
-// `format` may meet a value of another shape (a number stored in a text
-// column, say), so the built-in types fall back to `String`.
-const asText = (value: unknown) => String(value)
 
 /** Text, kept exactly as typed. */
 export const textType = defineColumnType({
@@ -34,6 +45,7 @@ export const textType = defineColumnType({
   format: (value: string) => asText(value),
   validate: (value) => (typeof value === "string" ? null : NOT_TEXT),
   compare: (a, b) => collator.compare(a, b),
+  filters: [containsFilter(), isTextFilter(), emptyFilter()],
 })
 
 /**
@@ -50,6 +62,7 @@ export const numberType = defineColumnType({
   validate: (value) =>
     typeof value === "number" && Number.isFinite(value) ? null : NOT_NUMBER,
   compare: (a, b) => a - b,
+  filters: [...orderFilters((text) => parseNumber(text)), emptyFilter()],
   align: "end",
 })
 
@@ -65,6 +78,13 @@ export const dateType = defineColumnType({
     typeof value === "string" && isIsoDate(value) ? null : NOT_DATE,
   // ISO dates sort as text.
   compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+  filters: [
+    ...orderFilters((text) => parseDate(text), {
+      lt: "before",
+      gt: "after",
+    }),
+    emptyFilter(),
+  ],
 })
 
 /** True or false, flipped with Space or Enter. Formats as TRUE or FALSE. */
@@ -77,6 +97,18 @@ export const booleanType = defineColumnType({
   format: (value: boolean) => formatBoolean(value),
   validate: (value) => (typeof value === "boolean" ? null : NOT_BOOLEAN),
   compare: (a, b) => Number(a) - Number(b),
+  filters: [
+    {
+      id: "is",
+      label: "is",
+      operands: 1,
+      test: (value, [text = ""]) => {
+        const parsed = parseBoolean(text)
+        return value !== null && parsed.ok && parsed.value === value
+      },
+    },
+    emptyFilter(),
+  ],
   edit: "toggle",
 })
 
@@ -138,6 +170,10 @@ export const selectType = defineColumnType<
     const j = p.order.get(b) ?? p.order.size
     return i - j || (i === p.order.size ? collator.compare(a, b) : 0)
   },
+  filters: [
+    anyOfFilter((text, p) => parseSelect(text, p.options)),
+    emptyFilter(),
+  ],
   edit: "popup",
 })
 
@@ -147,8 +183,17 @@ export const selectType = defineColumnType<
  */
 export const builtInTypes = [
   textType,
+  longTextType,
   numberType,
+  percentType,
+  moneyType,
   dateType,
   selectType,
   booleanType,
+  identifierType,
+  emailType,
+  urlType,
+  domainType,
+  phoneShapeType,
+  countryType,
 ] as const
