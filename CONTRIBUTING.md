@@ -18,7 +18,7 @@ pnpm --filter @sheetcn/playground dev   # the playground, at http://localhost:51
 3. Before you push, run the same checks as CI:
 
    ```sh
-   pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm check:licenses
+   pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm check:licenses && pnpm test:e2e
    ```
 
 4. Write plain English, and use a plain dash rather than an em dash (`pnpm lint` checks this).

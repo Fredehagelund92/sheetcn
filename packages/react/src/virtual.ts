@@ -61,7 +61,7 @@ export function useSheetRowVirtualizer<Row extends RowData>(
   // The virtualizer's functions are not memoizable; nothing here relies on
   // compiler memoization.
   // eslint-disable-next-line react-hooks/incompatible-library
-  return useVirtualizer({
+  const virtualizer = useVirtualizer({
     count: sheet.getRows().length,
     getScrollElement: options.getScrollElement,
     estimateSize: () => rowHeight,
@@ -71,6 +71,15 @@ export function useSheetRowVirtualizer<Row extends RowData>(
     getItemKey,
     rangeExtractor,
   })
+  // The rows on screen, which a fit to content always measures.
+  const first = virtualizer.range?.startIndex ?? -1
+  const last = virtualizer.range?.endIndex ?? -1
+  useLayoutEffect(() => {
+    sheet.setVisibleRows(
+      first < 0 ? null : { startIndex: first, endIndex: last }
+    )
+  }, [sheet, first, last])
+  return virtualizer
 }
 
 export type SheetColumnVirtualizerOptions = {
@@ -83,19 +92,24 @@ export type SheetColumnVirtualizerOptions = {
 
 /**
  * A virtualizer over the unpinned ("center") columns. Pinned columns render
- * always, before them. It measures again when a column is resized, and keeps
- * the active cell's column mounted.
+ * always, before them. It measures again when a column's width changes, and
+ * keeps the active cell's column mounted.
+ *
+ * It also tells the sheet how wide the scroll element is, less the gutter,
+ * which "fill" sizing shares out. Lay columns out with
+ * `sheet.getColumnWidth`, which includes that share.
  */
 export function useSheetColumnVirtualizer<Row extends RowData>(
   sheet: Sheet<Row>,
   options: SheetColumnVirtualizerOptions
 ) {
-  const { overscan = 2, gutterWidth = 0 } = options
+  const { overscan = 2, gutterWidth = 0, getScrollElement } = options
   const { table } = sheet
   const start = table.getPinnedLeafColumns("start")
   const center = table.getPinnedLeafColumns("center")
-  const pinnedWidth = start.reduce((w, c) => w + c.getSize(), gutterWidth)
-  const sizes = center.map((c) => c.getSize()).join(",")
+  const width = (id: string) => sheet.getColumnWidth(id)
+  const pinnedWidth = start.reduce((w, c) => w + width(c.id), gutterWidth)
+  const sizes = center.map((c) => width(c.id)).join(",")
   const rangeExtractor = useCallback(
     (range: Range) => {
       const active = sheet.getActiveRange()?.anchor.columnIndex
@@ -108,8 +122,11 @@ export function useSheetColumnVirtualizer<Row extends RowData>(
   const virtualizer = useVirtualizer({
     horizontal: true,
     count: center.length,
-    getScrollElement: options.getScrollElement,
-    estimateSize: (i) => center[i]?.getSize() ?? 0,
+    getScrollElement,
+    estimateSize: (i) => {
+      const column = center[i]
+      return column ? width(column.id) : 0
+    },
     overscan,
     paddingStart: pinnedWidth,
     scrollPaddingStart: pinnedWidth,
@@ -118,5 +135,18 @@ export function useSheetColumnVirtualizer<Row extends RowData>(
   useLayoutEffect(() => {
     virtualizer.measure()
   }, [sizes, virtualizer])
+  useLayoutEffect(() => {
+    const element = getScrollElement()
+    if (!element) return
+    // clientWidth leaves out a vertical scrollbar, so filled columns end at
+    // its edge.
+    const update = () =>
+      sheet.setAvailableWidth(element.clientWidth - gutterWidth)
+    update()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [sheet, getScrollElement, gutterWidth])
   return virtualizer
 }

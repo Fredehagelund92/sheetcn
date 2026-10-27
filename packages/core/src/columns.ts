@@ -13,6 +13,8 @@ type Shared<Row, V extends CellValue> = Partial<
     | "readOnly"
     | "width"
     | "minWidth"
+    | "maxWidth"
+    | "grow"
     | "pin"
     | "format"
     | "parse"

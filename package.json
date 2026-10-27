@@ -12,6 +12,7 @@
     "lint": "eslint . && prettier --check . && node scripts/check-text.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:e2e": "pnpm --filter @sheetcn/playground test:e2e",
     "check:licenses": "node scripts/check-licenses.mjs"
   },
   "devDependencies": {
