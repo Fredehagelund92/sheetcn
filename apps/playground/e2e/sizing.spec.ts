@@ -123,9 +123,13 @@ test("the grid width slider narrows the grid, and fill follows it", async ({
   await slider.focus()
   for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowLeft")
   await expect(slider).toHaveValue("90")
-  const at = await layout(page)
-  expect(at.clientWidth).toBeLessThan(1440)
-  expect(at.lastRight).toBeCloseTo(at.gridRight, 0)
+  // The grid re-measures after the resize, so wait for the columns to settle.
+  await expect
+    .poll(async () => {
+      const at = await layout(page)
+      return at.clientWidth < 1440 && Math.abs(at.lastRight - at.gridRight) < 0.5
+    })
+    .toBe(true)
 })
 
 test("double-clicking a column's right edge fits it to its content", async ({
