@@ -1,7 +1,7 @@
 {
   "name": "@sheetcn/react",
   "version": "0.0.0",
-  "description": "React binding for sheetcn: useSheet wires the core store to TanStack Table cell selection and TanStack Virtual, with the keyboard map, editing and pointer selection.",
+  "description": "React binding for sheetcn: useSheet wires the core store to TanStack Table cell selection and TanStack Virtual, with the keyboard map, editing, pointer selection and views that filter, sort and group.",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -333,6 +333,34 @@ def boolean_demo():
     demo.save()
 
 
+def filter_demo():
+    demo = Demo("filter")
+    open_playground("light", DEMO_VIEWPORT)
+    demo.shot(700)
+    press("Control+Shift+f", demo, "Ctrl or Cmd + Shift + F opens the filter", 900)
+    caption = "Type to find a column"
+    for ch in "sta":
+        axi("press", ch)
+        demo.shot(300, caption)
+    demo.shot(500, caption)
+    press("Enter", demo, "Enter picks it; the likely operator comes first", 1100)
+    press("Enter", demo, "Enter again, and the values come with their counts", 1300)
+    caption = "Search the values, Space ticks one"
+    for ch in "pau":
+        axi("press", ch)
+        demo.shot(260, caption)
+    press(" ", demo, caption, 1200)
+    press("Enter", demo, "Enter makes the chip, and the grid shows the rows", 1700)
+    p = js("""(() => {
+      const b = [...document.querySelectorAll(".tabs .tab")].find((b) => b.textContent.startsWith("Paused or archived"))
+      const box = b.getBoundingClientRect()
+      b.click()
+      return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
+    })()""")
+    demo.shot(1800, "Saved views are the app's, with a count each", p)
+    demo.save()
+
+
 def sizing_demo():
     demo = Demo("sizing")
     # Seven columns, 822 px wide: room to spare in this viewport.
@@ -384,7 +412,15 @@ def sizing_demo():
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    steps = [banner, selection_demo, keyboard_demo, scroll_demo, boolean_demo, sizing_demo]
+    steps = [
+        banner,
+        selection_demo,
+        keyboard_demo,
+        scroll_demo,
+        boolean_demo,
+        sizing_demo,
+        filter_demo,
+    ]
     only = sys.argv[2:]  # optional: step names, such as keyboard_demo
     axi("start")
     axi("selectpage", "1")

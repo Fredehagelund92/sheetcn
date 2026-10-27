@@ -1,4 +1,5 @@
 import {
+  countRows,
   fillColumnWidths,
   formatCell,
   getCellValue,
@@ -23,6 +24,9 @@ import {
   type RowSpan,
   type SheetCommand,
   type SheetStore,
+  type SheetView,
+  type ViewIssue,
+  type ViewModel,
 } from "@sheetcn/core"
 import type { RowData } from "@tanstack/react-table"
 
@@ -88,9 +92,11 @@ export type Sheet<Row extends RowData> = {
   readonly store: SheetStore<Row>
   readonly columns: readonly Column<Row>[]
 
-  /** Rows in display order. */
+  /** The rows the view shows, in display order. */
   getRows(this: void): readonly SheetRow<Row>[]
-  /** Column ids in display order: pinned columns first. */
+  /** How many rows there are, shown or not. */
+  getTotalRowCount(this: void): number
+  /** Ids of the columns shown, in display order: pinned columns first. */
   getColumnIds(this: void): readonly string[]
   getColumn(this: void, columnId: string): Column<Row> | undefined
   /** The row's display index, or -1. */
@@ -139,6 +145,27 @@ export type Sheet<Row extends RowData> = {
    * the column then keeps the width it was given.
    */
   getColumnResizeHandler(this: void, columnId: string): (event: unknown) => void
+
+  /**
+   * The view: what the sheet shows of its rows (filter, sort, group and
+   * hidden columns), as plain data an app can save.
+   */
+  getView(this: void): SheetView
+  /**
+   * Changes the view. With a controlled `view` this only calls
+   * `onViewChange`; the app passes the view back.
+   */
+  setView(
+    this: void,
+    view: SheetView | ((current: SheetView) => SheetView)
+  ): void
+  /** Parts of the view that cannot apply and are skipped (see `ViewIssue`). */
+  getViewIssues(this: void): readonly ViewIssue[]
+  /**
+   * How many rows a view would show, for a count on a saved view's tab. One
+   * pass of its filter over the rows.
+   */
+  countRows(this: void, view: SheetView): number
 
   getSelection(this: void): readonly CellRange[]
   /** The selected cells as disjoint rectangles of display indexes. */
@@ -195,7 +222,14 @@ export type SheetSource<Row extends RowData> = {
   store: SheetStore<Row>
   columns: readonly Column<Row>[]
   sizing?: ColumnSizing
+  view?: SheetView
+  viewModel?: ViewModel<Row>
+  /** Sets the next view: the sheet's own, or the app's through its callback. */
+  setView?: (view: SheetView) => void
+  today?: string
 }
+
+const NO_VIEW: SheetView = {}
 
 type FillWidths = { key: readonly unknown[]; widths: Map<string, number> }
 
@@ -218,6 +252,11 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   #measurer: ColumnMeasurer<Row> | null = null
   #layoutVersion = 0
   readonly #layoutListeners = new Set<() => void>()
+  /**
+   * Where the active cell was before a change that may hide its row, so
+   * `keepActiveCell` can put it back at that place among the rows shown.
+   */
+  #lastActive: CellIndex | null = null
 
   constructor(source: SheetSource<Row>) {
     this.#source = source
@@ -251,6 +290,8 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   // Layout -------------------------------------------------------------------
 
   getRows = () => this.table.getRowsInDisplayOrder()
+
+  getTotalRowCount = () => this.store.getRows().length
 
   getColumnIds = (): readonly string[] =>
     // The column index map is memoized by TanStack on column layout state.
@@ -312,6 +353,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     const key = [
       sizing,
       table.atoms.columnPinning.get(),
+      table.atoms.columnVisibility.get(),
       table.options.columns,
       this.#available,
       this.#userSized,
@@ -320,8 +362,8 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     if (cached && key.every((k, i) => Object.is(k, cached.key[i]))) {
       return cached.widths
     }
-    const pinned = table.getPinnedLeafColumns("start")
-    const leaves = [...pinned, ...table.getPinnedLeafColumns("center")]
+    const pinned = table.getPinnedVisibleLeafColumns("start")
+    const leaves = [...pinned, ...table.getPinnedVisibleLeafColumns("center")]
     const input = leaves.map((c, i) => {
       const userSized = this.#userSized.has(c.id) && c.id in sizing
       const grow = userSized ? 0 : this.getColumn(c.id)?.grow
@@ -495,6 +537,57 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     })
   }
 
+  // View ---------------------------------------------------------------------
+
+  getView = (): SheetView => this.#source.view ?? NO_VIEW
+
+  setView = (view: SheetView | ((current: SheetView) => SheetView)) => {
+    const next = typeof view === "function" ? view(this.getView()) : view
+    if (next === this.getView()) return
+    this.#rememberActive()
+    this.#source.setView?.(next)
+  }
+
+  getViewIssues = (): readonly ViewIssue[] =>
+    this.#source.viewModel?.issues ?? []
+
+  countRows = (view: SheetView): number =>
+    countRows(
+      this.store.getRows(),
+      this.columns,
+      view,
+      this.#source.today === undefined ? {} : { today: this.#source.today }
+    )
+
+  #rememberActive() {
+    const active = this.getActiveRange()
+    if (active) this.#lastActive = active.anchor
+  }
+
+  /**
+   * Keeps a cell active among the rows and columns shown. When a view
+   * change or an edit hid the active cell's row (or column), the cell at
+   * its last place becomes active: the row that moved up into it, or the
+   * last row. `useSheet` calls it after each render that changed the rows
+   * or the view.
+   */
+  keepActiveCell(): void {
+    if (this.getActiveRange()) {
+      this.#rememberActive()
+      return
+    }
+    if (!this.getSelection().length) return
+    const { rowCount, columnCount } = this.#size()
+    if (!rowCount || !columnCount) return
+    const last = this.#lastActive ?? { rowIndex: 0, columnIndex: 0 }
+    const cell = {
+      rowIndex: Math.min(last.rowIndex, rowCount - 1),
+      columnIndex: Math.min(last.columnIndex, columnCount - 1),
+    }
+    this.select({ anchor: cell, focus: cell })
+    this.#lastActive = cell
+  }
+
   // State --------------------------------------------------------------------
 
   getState = () => this.#state
@@ -576,6 +669,15 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   }
 
   #navigate(nav: Navigation, viewport: Viewport): boolean {
+    const next = this.#nextRange(nav, viewport)
+    if (!next) return false
+    const extend = "extend" in nav && nav.extend
+    this.select(next, extend ? "extend" : "replace")
+    return true
+  }
+
+  /** Where a navigation moves the active range, over the rows shown. */
+  #nextRange(nav: Navigation, viewport: Viewport): ActiveRange | null {
     const size = { ...this.#size(), ...viewport }
     const rows = this.getRows()
     const ids = this.getColumnIds()
@@ -584,11 +686,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
       const row = rows[r]
       return !column || !row || isEmpty(getCellValue(column, row.original))
     }
-    const next = navigate(this.getActiveRange(), nav, size, isBlank)
-    if (!next) return false
-    const extend = "extend" in nav && nav.extend
-    this.select(next, extend ? "extend" : "replace")
-    return true
+    return navigate(this.getActiveRange(), nav, size, isBlank)
   }
 
   // Editing ------------------------------------------------------------------
@@ -654,16 +752,30 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
       this.#setState({ editing: { ...editing, error: parsed.error } })
       return false
     }
+    // Where the move goes is decided among the rows shown now: with a view
+    // on, the edit may hide its row or move it elsewhere.
+    const target = move
+      ? this.#nextRange(
+          { type: "move", direction: move, extend: false },
+          DEFAULT_VIEWPORT
+        )
+      : null
+    const to = target && {
+      anchorRowId: this.#rowIdAt(target.anchor.rowIndex),
+      anchorColumnId: this.#columnIdAt(target.anchor.columnIndex),
+    }
+    this.#rememberActive()
+    if (target) this.#lastActive = target.anchor
     this.#setState({ editing: null })
     this.store.transaction("edit", (tx) =>
       tx.set(editing.rowId, editing.columnId, parsed.value)
     )
-    if (move) {
-      this.#navigate(
-        { type: "move", direction: move, extend: false },
-        DEFAULT_VIEWPORT
-      )
-    }
+    if (to)
+      this.select({
+        ...to,
+        focusRowId: to.anchorRowId,
+        focusColumnId: to.anchorColumnId,
+      })
     return true
   }
 
@@ -676,6 +788,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
       return false
     }
     const value = getCellValue(column, row.original)
+    this.#rememberActive()
     this.store.transaction("edit", (tx) => tx.set(row.id, column.id, !value))
     return true
   }
@@ -687,6 +800,7 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     const rows = this.getRows()
     const columns = this.getColumnIds().map((id) => this.getColumn(id))
     let skipped = 0
+    this.#rememberActive()
     const change = this.store.transaction("clear", (tx) => {
       for (const rect of rects) {
         for (let r = rect.minRowIndex; r <= rect.maxRowIndex; r++) {
@@ -718,11 +832,13 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
 
   undo = () => {
     this.cancelEdit()
+    this.#rememberActive()
     this.#selectChanged(this.store.undo())
   }
 
   redo = () => {
     this.cancelEdit()
+    this.#rememberActive()
     this.#selectChanged(this.store.redo())
   }
 

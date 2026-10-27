@@ -82,10 +82,19 @@ export function SheetGrid({
   label,
   mode = "sheet",
   gridlines = DEFAULT_GRIDLINES[mode],
+  filtered,
+  onKey,
 }: {
   sheet: AnySheet
   label: string
   mode?: GridMode
+  /** Columns a filter names, which get a mark in their header. */
+  filtered?: ReadonlySet<string>
+  /**
+   * Sees each key press before the sheet does, for the app's own keys such
+   * as the filter shortcut. Return true when it handled the key.
+   */
+  onKey?: (e: KeyboardEvent<HTMLDivElement>) => boolean
   /**
    * The lines between cells. The header's bottom line, the row numbers' edge
    * and the pinned columns' edge always show. Set as one attribute on the
@@ -96,8 +105,8 @@ export function SheetGrid({
   const scrollRef = useRef<HTMLDivElement>(null)
   const { table } = sheet
   const rows = sheet.getRows()
-  const startColumns = table.getPinnedLeafColumns("start")
-  const centerColumns = table.getPinnedLeafColumns("center")
+  const startColumns = table.getPinnedVisibleLeafColumns("start")
+  const centerColumns = table.getPinnedVisibleLeafColumns("center")
   const width = sheet.getColumnWidth
   const pinnedWidth = startColumns.reduce(
     (w, c) => w + width(c.id),
@@ -154,6 +163,7 @@ export function SheetGrid({
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (onKey?.(e)) return
     const command = sheet.handleKeyDown(e.nativeEvent, viewport())
     if (command && SCROLLS.has(command.type)) scrollToFocus()
   }
@@ -205,6 +215,7 @@ export function SheetGrid({
                 left={GUTTER_WIDTH + c.getStart("start")}
                 width={width(c.id)}
                 last={i === startColumns.length - 1}
+                filtered={filtered?.has(c.id) ?? false}
               />
             ))}
             <div aria-hidden style={{ width: leftSpacer, flex: "none" }} />
@@ -218,6 +229,7 @@ export function SheetGrid({
                   columnId={c.id}
                   columnIndex={startColumns.length + v.index}
                   width={width(c.id)}
+                  filtered={filtered?.has(c.id) ?? false}
                 />
               )
             })}
@@ -254,6 +266,7 @@ const HeaderCell = memo(function HeaderCell({
   width,
   left,
   last,
+  filtered,
 }: {
   sheet: AnySheet
   columnId: string
@@ -261,6 +274,7 @@ const HeaderCell = memo(function HeaderCell({
   width: number
   left?: number
   last?: boolean
+  filtered: boolean
 }) {
   const selected = useSheetSelection(sheet, (s) =>
     s
@@ -289,7 +303,11 @@ const HeaderCell = memo(function HeaderCell({
       )}
       style={{ width, left }}
     >
-      <HeaderContent columnIndex={columnIndex} title={column?.header ?? ""} />
+      <HeaderContent
+        columnIndex={columnIndex}
+        title={column?.header ?? ""}
+        filtered={filtered}
+      />
       {header?.column.getCanResize() && (
         <div
           aria-hidden
@@ -309,16 +327,27 @@ const HeaderCell = memo(function HeaderCell({
 function HeaderContent({
   columnIndex,
   title,
+  filtered = false,
 }: {
   columnIndex: number
   title: string
+  /** A filter names the column: a mark beside its letter. */
+  filtered?: boolean
 }) {
   return (
     <>
       <span aria-hidden className="letter">
         {columnLetter(columnIndex)}
+        {filtered && (
+          <svg className="filtered" viewBox="0 0 16 16">
+            <path d="M2.5 3.5h11l-4.2 5v4l-2.6 1.2V8.5z" />
+          </svg>
+        )}
       </span>
-      <span className="title">{title}</span>
+      <span className="title">
+        {title}
+        {filtered && <span className="sr-only">(filtered)</span>}
+      </span>
     </>
   )
 }
@@ -352,8 +381,8 @@ const SheetRowView = memo(function SheetRowView({
     s.editing?.rowId === row.id ? s.editing : null
   )
   const { table } = sheet
-  const startColumns = table.getPinnedLeafColumns("start")
-  const centerColumns = table.getPinnedLeafColumns("center")
+  const startColumns = table.getPinnedVisibleLeafColumns("start")
+  const centerColumns = table.getPinnedVisibleLeafColumns("center")
   const rects = selectionKey ? sheet.getSelectionRects() : []
   const active = selectionKey ? sheet.getActiveRange()?.anchor : undefined
   const activeColumn = active?.rowIndex === rowIndex ? active.columnIndex : -1

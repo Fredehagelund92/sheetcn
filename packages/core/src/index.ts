@@ -88,6 +88,18 @@ export {
   type RowTest,
 } from "./filter.js"
 export {
+  canFilter,
+  describeCondition,
+  filterChoices,
+  filterLabel,
+  periodLabel,
+  PERIOD_CHOICES,
+  valueChoices,
+  type ConditionWords,
+  type FilterChoice,
+  type ValueChoice,
+} from "./filter-menu.js"
+export {
   createViewModel,
   type ViewGroup,
   type ViewModel,
