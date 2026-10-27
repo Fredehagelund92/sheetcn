@@ -183,7 +183,8 @@ export type Sheet<Row extends RowData> = {
 const NO_STATE: SheetState = { editing: null, notice: null }
 const DEFAULT_VIEWPORT: Viewport = { pageRows: 20, pageColumns: 5 }
 
-const isEmpty = (v: unknown) => v === null || v === ""
+const isEmpty = (v: unknown) =>
+  v === null || v === "" || (Array.isArray(v) && v.length === 0)
 
 /** The most rows `fitColumn` measures, the rows on screen included. */
 const FIT_SAMPLE_ROWS = 500

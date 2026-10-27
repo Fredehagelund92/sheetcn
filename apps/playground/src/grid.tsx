@@ -457,7 +457,7 @@ function Cell({
   editing: EditState | null
 }) {
   const value = getCellValue(column, original)
-  const issue = validateCell(column, value, original)
+  const issue = validateCell(column, value, original, sheet.store.getRows())
   const readOnly = isCellReadOnly(column, original)
   const outline = edges
     ? [
@@ -492,7 +492,7 @@ function Cell({
       )}
       style={{ width, left, boxShadow: outline || undefined }}
     >
-      <CellContent column={column} value={value} />
+      <CellContent column={column} value={value} row={original} />
       {issue && <span aria-hidden className="flag" />}
       {active && !editing && <span aria-hidden className="active-ring" />}
       {editing && <Editor sheet={sheet} column={column} editing={editing} />}
@@ -503,21 +503,37 @@ function Cell({
 function CellContent({
   column,
   value,
+  row,
 }: {
   column: Column<Record<string, unknown>>
   value: CellValue
+  row?: Record<string, unknown>
 }) {
-  if (resolveColumnType(column).def.edit === "toggle") {
+  const { def } = resolveColumnType(column)
+  if (def.edit === "toggle") {
     return (
       <span className={cx("check", value === true && "on")}>
         {value === true ? "Yes" : "No"}
       </span>
     )
   }
-  const text = formatCell(column, value)
+  const text = formatCell(column, value, row)
   if (column.type === "select" && text)
     return <span className="chip">{text}</span>
-  return <span className="text">{text}</span>
+  if (column.type === "longtext") {
+    // The first line, and "..." when there are more.
+    const end = text.indexOf("\n")
+    return (
+      <span className="text">
+        {end < 0 ? text : `${text.slice(0, end)} ...`}
+      </span>
+    )
+  }
+  return (
+    <span className={cx("text", column.type === "identifier" && "mono")}>
+      {text}
+    </span>
+  )
 }
 
 function Editor({
@@ -529,25 +545,44 @@ function Editor({
   column: Column<Record<string, unknown>>
   editing: EditState
 }) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   useEffect(() => {
     const input = inputRef.current
     if (!input) return
     input.focus({ preventScroll: true })
     input.setSelectionRange(input.value.length, input.value.length)
   }, [])
+  const props = {
+    ref: inputRef,
+    "aria-label": `Edit ${column.header}`,
+    "aria-invalid": editing.error ? true : undefined,
+    value: editing.draft,
+    // Keys bubble to the grid, which knows the editor is open.
+    onBlur: () => sheet.commitEdit(),
+  }
   return (
     <>
-      <input
-        ref={inputRef}
-        aria-label={`Edit ${column.header}`}
-        aria-invalid={editing.error ? true : undefined}
-        className={cx("editor", editing.error && "invalid")}
-        value={editing.draft}
-        onChange={(e) => sheet.setDraft(e.target.value)}
-        // Keys bubble to the grid, which knows the editor is open.
-        onBlur={() => sheet.commitEdit()}
-      />
+      {column.type === "longtext" ? (
+        <textarea
+          {...props}
+          className={cx("editor", "multiline", editing.error && "invalid")}
+          onChange={(e) => sheet.setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            // Alt+Enter starts a new line; Enter commits, through the grid.
+            if (e.key !== "Enter" || !e.altKey) return
+            e.preventDefault()
+            const el = e.currentTarget
+            el.setRangeText("\n", el.selectionStart, el.selectionEnd, "end")
+            sheet.setDraft(el.value)
+          }}
+        />
+      ) : (
+        <input
+          {...props}
+          className={cx("editor", editing.error && "invalid")}
+          onChange={(e) => sheet.setDraft(e.target.value)}
+        />
+      )}
       {editing.error && (
         <span role="alert" className="editor-error">
           {editing.error}

@@ -1,7 +1,7 @@
 {
   "name": "@sheetcn/core",
   "version": "0.0.0",
-  "description": "Headless spreadsheet core for sheetcn: column schema, cell values, a row store with history, selection geometry and the keyboard map. No React, no DOM.",
+  "description": "Headless spreadsheet core for sheetcn: column schema and column types, cell values, a row store with history, selection geometry and the keyboard map. No React, no DOM. The optional @sheetcn/core/phone entry adds phone numbers through libphonenumber-js.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,6 +14,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./phone": {
+      "types": "./dist/phone.d.ts",
+      "default": "./dist/phone.js"
     }
   },
   "files": [
@@ -22,5 +26,16 @@
   ],
   "scripts": {
     "build": "tsc -b"
+  },
+  "peerDependencies": {
+    "libphonenumber-js": "1.13.15"
+  },
+  "peerDependenciesMeta": {
+    "libphonenumber-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "libphonenumber-js": "1.13.15"
   }
 }

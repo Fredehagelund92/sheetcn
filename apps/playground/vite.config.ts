@@ -8,15 +8,28 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@sheetcn/core": resolve(
-        import.meta.dirname,
-        "../../packages/core/src/index.ts"
-      ),
-      "@sheetcn/react": resolve(
-        import.meta.dirname,
-        "../../packages/react/src/index.ts"
-      ),
-    },
+    alias: [
+      {
+        find: /^@sheetcn\/core$/,
+        replacement: resolve(
+          import.meta.dirname,
+          "../../packages/core/src/index.ts"
+        ),
+      },
+      {
+        find: /^@sheetcn\/core\/phone$/,
+        replacement: resolve(
+          import.meta.dirname,
+          "../../packages/core/src/phone.ts"
+        ),
+      },
+      {
+        find: /^@sheetcn\/react$/,
+        replacement: resolve(
+          import.meta.dirname,
+          "../../packages/react/src/index.ts"
+        ),
+      },
+    ],
   },
 })

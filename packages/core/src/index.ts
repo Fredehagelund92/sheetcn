@@ -17,6 +17,7 @@ export {
   type AnyColumnTypeDef,
   type ColumnTypeDef,
   type EditHint,
+  type FilterOp,
   type TypeGroup,
   type TypeOptions,
   type TypeValue,
@@ -30,6 +31,25 @@ export {
   textType,
   type SelectOptions,
 } from "./built-in-types.js"
+export {
+  domainType,
+  emailType,
+  identifierType,
+  longTextType,
+  urlType,
+  type DomainOptions,
+  type IdentifierOptions,
+  type LongTextOptions,
+  type UrlOptions,
+} from "./column-types/text.js"
+export {
+  moneyType,
+  percentType,
+  type MoneyOptions,
+  type PercentOptions,
+} from "./column-types/numeric.js"
+export { phoneShapeType } from "./column-types/phone.js"
+export { countryType, type CountryOptions } from "./column-types/country.js"
 export {
   createTypeRegistry,
   defineColumns,
@@ -50,6 +70,7 @@ export {
 export {
   cellsEqual,
   compareCells,
+  filterCell,
   formatCell,
   parseCell,
   resolveColumnType,

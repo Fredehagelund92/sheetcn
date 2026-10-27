@@ -511,6 +511,21 @@ button:focus-visible {
   outline: none;
 }
 
+/* A long text's editor opens over the cells below it. */
+.editor.multiline {
+  bottom: auto;
+  height: 96px;
+  padding: 7px;
+  line-height: 18px;
+  resize: none;
+  white-space: pre-wrap;
+}
+
+.cell .mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
 .editor.invalid {
   box-shadow: inset 0 0 0 2px var(--destructive);
 }

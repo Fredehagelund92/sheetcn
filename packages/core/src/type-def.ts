@@ -58,13 +58,27 @@ export type ColumnTypeDef<
   prepare?(this: void, options: O): P
   /** Text from an editor, paste, fill or import to a value. */
   parse(this: void, text: string, prepared: P): ParseResult<V | null>
-  /** A value to text for display and copy. `parse` reads it back. */
-  format(this: void, value: V, prepared: P): string
+  /**
+   * A value to text for display and copy. `parse` reads it back. `row` is
+   * the row the value is in when the text is for display; copy and editing
+   * pass none, and must not need it.
+   */
+  format(this: void, value: V, prepared: P, row?: unknown): string
   /**
    * Checks a stored value. A failing value is still stored, and the cell is
    * flagged. `row` is the row the value is in.
    */
   validate?(this: void, value: V, prepared: P, row: unknown): Issue | null
+  /**
+   * Checks an empty cell, for a type whose cells must be filled in (such as
+   * a required identifier). Default: empty cells pass.
+   */
+  validateEmpty?(this: void, prepared: P, row: unknown): Issue | null
+  /**
+   * Values must be distinct within the column. `validateCell`, given the
+   * rows, flags each repeat with another row that holds it.
+   */
+  unique?: boolean
   /** Whether two values are the same. Default: `Object.is`. */
   equals?(this: void, a: V, b: V): boolean
   /**
@@ -72,10 +86,35 @@ export type ColumnTypeDef<
    * texts, compared as words.
    */
   compare?(this: void, a: V, b: V, prepared: P): number
+  /**
+   * The ways to filter the column's cells, such as "contains" or "between".
+   * No filter UI ships yet; `filterCell` runs one.
+   */
+  filters?: readonly FilterOp<V, P>[]
   /** Default: "text". */
   edit?: EditHint
   /** Where the value sits in its cell. Default: "start". */
   align?: "start" | "end"
+}
+
+/**
+ * One way to filter a column. `operands` is how many texts the user gives:
+ * none ("is empty"), one ("contains"), two ("between") or any number ("is
+ * any of"). `test` reads the operand texts itself, usually with the type's
+ * own parse, and gets empty cells as `null`.
+ */
+export type FilterOp<V extends CellValue = CellValue, P = unknown> = {
+  /** Unique within the type, such as "contains". */
+  id: string
+  /** The words for people, such as "contains". */
+  label: string
+  operands: 0 | 1 | 2 | "many"
+  test(
+    this: void,
+    value: V | null,
+    operands: readonly string[],
+    prepared: P
+  ): boolean
 }
 
 /** A definition of any value, options and prepared state. */

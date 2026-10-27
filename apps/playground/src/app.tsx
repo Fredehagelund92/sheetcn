@@ -9,7 +9,7 @@ import type { ColumnSizing } from "@sheetcn/core"
 import { useEffect, useState } from "react"
 
 import { installBench, measureCommits, type Stats } from "./bench"
-import { columns, getRowId, makeItems } from "./data"
+import { columns, getRowId, makeItems, types } from "./data"
 import {
   DEFAULT_GRIDLINES,
   SheetGrid,
@@ -47,6 +47,7 @@ export function App() {
   const [frame, setFrame] = useState(100)
   const [gridlines, setGridlines] = useState(startGridlines)
   const typed = useSheet({
+    types,
     columns: shownColumns,
     getRowId,
     defaultData: data,
