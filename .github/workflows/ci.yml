@@ -33,3 +33,7 @@ jobs:
         run: pnpm build
       - name: License scan
         run: pnpm check:licenses
+      - name: Install Chromium for the journeys
+        run: pnpm --filter @sheetcn/playground exec playwright install --with-deps chromium
+      - name: Journeys
+        run: pnpm test:e2e

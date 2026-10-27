@@ -1,4 +1,5 @@
 import {
+  fillColumnWidths,
   formatCell,
   getCellValue,
   isCellReadOnly,
@@ -6,16 +7,19 @@ import {
   navigate,
   parseCell,
   rectsContain,
+  sampleRowIndexes,
   type ActiveRange,
   type CellIndex,
   type CellRange,
   type CellRect,
   type Change,
   type Column,
+  type ColumnSizing,
   type Direction,
   type EditMode,
   type KeyInput,
   type Navigation,
+  type RowSpan,
   type SheetCommand,
   type SheetStore,
 } from "@sheetcn/core"
@@ -54,6 +58,16 @@ export type Viewport = { pageRows: number; pageColumns: number }
  */
 export type SelectMode = "replace" | "extend" | "add" | "exclude"
 
+/**
+ * Measures a column's content for `fitColumn`: the width in pixels, padding
+ * and borders included, that shows the column's header and each of `rows`
+ * without clipping. The view supplies it, because it knows its own markup.
+ */
+export type ColumnMeasurer<Row> = (
+  column: Column<Row>,
+  rows: readonly Row[]
+) => number
+
 /** The fields of a DOM keyboard event `handleKeyDown` reads. */
 export type KeyboardEventLike = KeyInput & { preventDefault(): void }
 
@@ -82,6 +96,48 @@ export type Sheet<Row extends RowData> = {
   rowIndexOf(this: void, rowId: string): number
   /** The column's display index, or -1. */
   columnIndexOf(this: void, columnId: string): number
+
+  /** How columns use the grid's width, from the `sizing` option. */
+  readonly sizing: ColumnSizing
+  /**
+   * The width a column shows at, in pixels: its size, and with "fill" sizing
+   * its share of the spare width. Lay columns out with this, not with the
+   * TanStack column's `getSize()`.
+   */
+  getColumnWidth(this: void, columnId: string): number
+  /**
+   * The width the columns can fill: the grid's client width, less a row
+   * number gutter. `useSheetColumnVirtualizer` sets it from the scroll
+   * element.
+   */
+  setAvailableWidth(this: void, width: number): void
+  /**
+   * The rows on screen, which `fitColumn` always measures.
+   * `useSheetRowVirtualizer` sets them.
+   */
+  setVisibleRows(this: void, rows: RowSpan | null): void
+  /** Sets how `fitColumn` measures content, or clears it with null. */
+  setColumnMeasurer(this: void, measurer: ColumnMeasurer<Row> | null): void
+  /**
+   * Sizes a column to its widest content, within its min and max widths: the
+   * header, the rows on screen and up to 500 rows in all, spread over the
+   * rest. With "fill" sizing the column then keeps that width and the other
+   * columns share the spare width. Returns false when no measurer is set.
+   */
+  fitColumn(this: void, columnId: string): boolean
+  /**
+   * Sizes every column to its content, as `fitColumn` does. With "fill"
+   * sizing the fitted widths become the minimums, and every column grows
+   * again, so the grid still fills its width.
+   */
+  fitAllColumns(this: void): boolean
+  /**
+   * The pointer handler for a column's resize handle (mouse down or touch
+   * start). Use it in place of the TanStack header's `getResizeHandler()`:
+   * with "fill" sizing, a drag starts from the width the column shows, and
+   * the column then keeps the width it was given.
+   */
+  getColumnResizeHandler(this: void, columnId: string): (event: unknown) => void
 
   getSelection(this: void): readonly CellRange[]
   /** The selected cells as disjoint rectangles of display indexes. */
@@ -128,12 +184,18 @@ const DEFAULT_VIEWPORT: Viewport = { pageRows: 20, pageColumns: 5 }
 
 const isEmpty = (v: unknown) => v === null || v === ""
 
+/** The most rows `fitColumn` measures, the rows on screen included. */
+const FIT_SAMPLE_ROWS = 500
+
 /** What the controller reads from the latest render. */
 export type SheetSource<Row extends RowData> = {
   table: SheetTable<Row>
   store: SheetStore<Row>
   columns: readonly Column<Row>[]
+  sizing?: ColumnSizing
 }
+
+type FillWidths = { key: readonly unknown[]; widths: Map<string, number> }
 
 /**
  * The sheet API over a TanStack table and a core store. `useSheet` creates
@@ -144,6 +206,16 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   #state = NO_STATE
   #columnsById = new Map<string, Column<Row>>()
   readonly #listeners = new Set<() => void>()
+  // Column layout outside TanStack's state. A change re-renders the host
+  // through `subscribeLayout`.
+  #available = Number.NaN
+  /** Columns the user sized (resized or fitted), which no longer grow. */
+  #userSized: ReadonlySet<string> = new Set()
+  #fill: FillWidths | null = null
+  #visibleRows: RowSpan | null = null
+  #measurer: ColumnMeasurer<Row> | null = null
+  #layoutVersion = 0
+  readonly #layoutListeners = new Set<() => void>()
 
   constructor(source: SheetSource<Row>) {
     this.#source = source
@@ -165,6 +237,9 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
   }
   get columns() {
     return this.#source.columns
+  }
+  get sizing(): ColumnSizing {
+    return this.#source.sizing ?? "fixed"
   }
 
   #indexColumns() {
@@ -198,6 +273,152 @@ export class SheetController<Row extends RowData> implements Sheet<Row> {
     (this.getRows()[rowIndex] as SheetRow<Row>).id
   #columnIdAt = (columnIndex: number) =>
     this.getColumnIds()[columnIndex] as string
+
+  // Column sizing ------------------------------------------------------------
+
+  /**
+   * Called when a column width may have changed outside TanStack's state:
+   * the available width in "fill" sizing, or which columns the user sized.
+   * `useSheet` re-renders the host on it.
+   */
+  subscribeLayout = (listener: () => void) => {
+    this.#layoutListeners.add(listener)
+    return () => {
+      this.#layoutListeners.delete(listener)
+    }
+  }
+
+  getLayoutVersion = () => this.#layoutVersion
+
+  #layoutChanged() {
+    this.#layoutVersion++
+    for (const listener of this.#layoutListeners) listener()
+  }
+
+  getColumnWidth = (columnId: string): number => {
+    if (this.sizing === "fill") {
+      const width = this.#fillWidths().get(columnId)
+      if (width !== undefined) return width
+    }
+    return this.table.getColumn(columnId)?.getSize() ?? 0
+  }
+
+  /** The fill widths, computed again only when an input changed. */
+  #fillWidths(): Map<string, number> {
+    const { table } = this
+    const sizing = table.atoms.columnSizing.get()
+    const key = [
+      sizing,
+      table.atoms.columnPinning.get(),
+      table.options.columns,
+      this.#available,
+      this.#userSized,
+    ]
+    const cached = this.#fill
+    if (cached && key.every((k, i) => Object.is(k, cached.key[i]))) {
+      return cached.widths
+    }
+    const pinned = table.getPinnedLeafColumns("start")
+    const leaves = [...pinned, ...table.getPinnedLeafColumns("center")]
+    const input = leaves.map((c, i) => {
+      const userSized = this.#userSized.has(c.id) && c.id in sizing
+      const grow = userSized ? 0 : this.getColumn(c.id)?.grow
+      return {
+        width: c.getSize(),
+        maxWidth: c.columnDef.maxSize ?? Infinity,
+        pinned: i < pinned.length,
+        ...(grow === undefined ? {} : { grow }),
+      }
+    })
+    const widths = fillColumnWidths(this.#available, input)
+    const map = new Map(leaves.map((c, i) => [c.id, widths[i] as number]))
+    this.#fill = { key, widths: map }
+    return map
+  }
+
+  setAvailableWidth = (width: number) => {
+    if (Object.is(width, this.#available)) return
+    this.#available = width
+    if (this.sizing === "fill") this.#layoutChanged()
+  }
+
+  setVisibleRows = (rows: RowSpan | null) => {
+    this.#visibleRows = rows
+  }
+
+  setColumnMeasurer = (measurer: ColumnMeasurer<Row> | null) => {
+    this.#measurer = measurer
+  }
+
+  /** Gives columns widths the user chose, so that they no longer grow. */
+  #setUserWidths(widths: Record<string, number>, grow = false) {
+    const ids = Object.keys(widths)
+    if (!ids.length) return
+    const userSized = new Set(this.#userSized)
+    for (const id of ids) {
+      if (grow) userSized.delete(id)
+      else userSized.add(id)
+    }
+    this.#userSized = userSized
+    this.table.setColumnSizing((old) => ({ ...old, ...widths }))
+    this.#layoutChanged()
+  }
+
+  /** The content width of a column within its limits, or null. */
+  #measure(columnId: string, rows: readonly Row[]): number | null {
+    const column = this.getColumn(columnId)
+    const def = this.table.getColumn(columnId)?.columnDef
+    if (!this.#measurer || !column || !def) return null
+    const width = this.#measurer(column, rows)
+    if (!Number.isFinite(width)) return null
+    const min = def.minSize ?? 0
+    const max = def.maxSize ?? Infinity
+    return Math.min(Math.max(Math.ceil(width), min), max)
+  }
+
+  /** The rows a fit measures: the rows on screen and a sample of the rest. */
+  #fitRows(): Row[] {
+    const rows = this.getRows()
+    return sampleRowIndexes(
+      rows.length,
+      this.#visibleRows,
+      FIT_SAMPLE_ROWS
+    ).map((i) => (rows[i] as SheetRow<Row>).original)
+  }
+
+  fitColumn = (columnId: string): boolean => {
+    if (!this.#measurer) return false
+    const width = this.#measure(columnId, this.#fitRows())
+    if (width === null) return false
+    this.#setUserWidths({ [columnId]: width })
+    return true
+  }
+
+  fitAllColumns = (): boolean => {
+    if (!this.#measurer) return false
+    const rows = this.#fitRows()
+    const widths: Record<string, number> = {}
+    for (const id of this.getColumnIds()) {
+      const width = this.#measure(id, rows)
+      if (width !== null) widths[id] = width
+    }
+    // In "fill" sizing, the fitted widths are the minimums and the columns
+    // share the spare width again, so the grid still fills.
+    this.#setUserWidths(widths, true)
+    return Object.keys(widths).length > 0
+  }
+
+  getColumnResizeHandler = (columnId: string) => (event: unknown) => {
+    const header = this.table
+      .getFlatHeaders()
+      .find((h) => h.column.id === columnId)
+    if (!header?.column.getCanResize()) return
+    // TanStack starts the drag from the column's size. Make that the width
+    // the column shows, which in "fill" sizing includes its share, so the
+    // edge stays under the pointer.
+    this.#setUserWidths({ [columnId]: this.getColumnWidth(columnId) })
+    header.getResizeHandler()(event)
+  }
 
   // Selection ----------------------------------------------------------------
 

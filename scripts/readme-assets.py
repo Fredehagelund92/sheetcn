@@ -103,9 +103,9 @@ def wait_frames(n=2):
     js(f"new Promise((done) => {{ let n = {n}; const f = () => (--n ? requestAnimationFrame(f) : done(true)); requestAnimationFrame(f) }})")
 
 
-def open_playground(scheme, viewport):
+def open_playground(scheme, viewport, query=""):
     axi("emulate", "--color-scheme", scheme, "--viewport", f"{viewport[0]}x{viewport[1]}x2")
-    axi("open", f"{URL}/")
+    axi("open", f"{URL}/{query}")
     js("new Promise((done) => { const f = () => (document.querySelector('[role=gridcell]') ? done(true) : setTimeout(f, 50)); f() })")
     js(HELPERS)
     # Keyboard focus on the active cell, as after a click.
@@ -333,9 +333,58 @@ def boolean_demo():
     demo.save()
 
 
+def sizing_demo():
+    demo = Demo("sizing")
+    # Seven columns, 822 px wide: room to spare in this viewport.
+    open_playground("light", DEMO_VIEWPORT, "?columns=7")
+    button = lambda name: f"""(() => {{
+      const b = [...document.querySelectorAll("button")].find((b) => b.textContent === {json.dumps(name)})
+      const box = b.getBoundingClientRect()
+      b.click()
+      return {{ x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }}
+    }})()"""
+    # Sets the grid width slider as a drag would, and returns the thumb.
+    frame = lambda value: f"""(() => {{
+      const input = document.querySelector("input[type=range]")
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set
+      set.call(input, "{value}")
+      input.dispatchEvent(new Event("input", {{ bubbles: true }}))
+      const box = input.getBoundingClientRect()
+      return {{ x: Math.round(box.left + 8 + (box.width - 16) * ({value} - 30) / 70), y: Math.round(box.top + box.height / 2) }}
+    }})()"""
+    demo.shot(1600, "Fixed widths leave a strip on a wide screen")
+    p = js(button("Fill width"))
+    demo.shot(1800, "Fill width shares the spare room", p)
+    for value in range(100, 49, -5):
+        p = js(frame(value))
+        demo.shot(120, "Narrower, as when the window is resized", p)
+    caption = "Too narrow: the columns keep their widths and scroll"
+    demo.shot(1000, caption, p)
+    for i in range(1, 7):
+        js(f"(() => {{ const g = document.querySelector('[role=grid]'); g.scrollLeft = (g.scrollWidth - g.clientWidth) * {i} / 6 }})()")
+        demo.shot(110, caption)
+    demo.shot(1300, caption)
+    js("document.querySelector('[role=grid]').scrollLeft = 0")
+    for value in range(55, 101, 9):
+        p = js(frame(value))
+        demo.shot(100, "Wider again: the columns fill", p)
+    p = js(frame(100))
+    demo.shot(1000, "Wider again: the columns fill", p)
+    p = js("""(() => {
+      const handle = document.querySelector('.head-cell[data-column-index="2"] .resize')
+      handle.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
+      const box = handle.getBoundingClientRect()
+      return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
+    })()""")
+    demo.shot(1800, "Double-click a column's edge to fit it", p)
+    p = js(button("Fit all columns"))
+    demo.shot(2000, "Fit all columns, and still fill", p)
+    demo.save()
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    steps = [banner, selection_demo, keyboard_demo, scroll_demo, boolean_demo]
+    steps = [banner, selection_demo, keyboard_demo, scroll_demo, boolean_demo, sizing_demo]
     only = sys.argv[2:]  # optional: step names, such as keyboard_demo
     axi("start")
     axi("selectpage", "1")

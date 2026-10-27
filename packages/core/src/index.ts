@@ -64,6 +64,13 @@ export {
   type Navigation,
 } from "./selection.js"
 export {
+  fillColumnWidths,
+  sampleRowIndexes,
+  type ColumnSizing,
+  type FillColumn,
+  type RowSpan,
+} from "./sizing.js"
+export {
   keyToCommand,
   type EditMode,
   type KeyContext,

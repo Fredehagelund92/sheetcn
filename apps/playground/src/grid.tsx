@@ -27,7 +27,10 @@ import {
   useLayoutEffect,
   useRef,
   type KeyboardEvent,
+  type ReactElement,
 } from "react"
+import { flushSync } from "react-dom"
+import { createRoot } from "react-dom/client"
 
 import { renderCount } from "./bench"
 
@@ -74,16 +77,17 @@ export function SheetGrid({
   const rows = sheet.getRows()
   const startColumns = table.getPinnedLeafColumns("start")
   const centerColumns = table.getPinnedLeafColumns("center")
+  const width = sheet.getColumnWidth
   const pinnedWidth = startColumns.reduce(
-    (w, c) => w + c.getSize(),
+    (w, c) => w + width(c.id),
     GUTTER_WIDTH
   )
   const totalWidth = centerColumns.reduce(
-    (w, c) => w + c.getSize(),
+    (w, c) => w + width(c.id),
     pinnedWidth
   )
   const sizingKey = [...startColumns, ...centerColumns]
-    .map((c) => c.getSize())
+    .map((c) => width(c.id))
     .join(",")
 
   const getScrollElement = useCallback(() => scrollRef.current, [])
@@ -99,6 +103,13 @@ export function SheetGrid({
   const { onPointerDown, onMouseDown } = useSheetPointer(sheet, {
     insets: () => ({ top: HEADER_HEIGHT, left: pinnedWidth }),
   })
+  useEffect(() => {
+    sheet.setColumnMeasurer((column, rows) => {
+      const host = scrollRef.current
+      return host ? measureColumn(host, sheet, column, rows) : Number.NaN
+    })
+    return () => sheet.setColumnMeasurer(null)
+  }, [sheet])
 
   const viewport = () => {
     const el = scrollRef.current
@@ -170,7 +181,7 @@ export function SheetGrid({
                 columnId={c.id}
                 columnIndex={i}
                 left={GUTTER_WIDTH + c.getStart("start")}
-                width={c.getSize()}
+                width={width(c.id)}
                 last={i === startColumns.length - 1}
               />
             ))}
@@ -184,7 +195,7 @@ export function SheetGrid({
                   sheet={sheet}
                   columnId={c.id}
                   columnIndex={startColumns.length + v.index}
-                  width={c.getSize()}
+                  width={width(c.id)}
                 />
               )
             })}
@@ -256,24 +267,39 @@ const HeaderCell = memo(function HeaderCell({
       )}
       style={{ width, left }}
     >
-      <span aria-hidden className="letter">
-        {columnLetter(columnIndex)}
-      </span>
-      <span className="title">{column?.header}</span>
+      <HeaderContent columnIndex={columnIndex} title={column?.header ?? ""} />
       {header?.column.getCanResize() && (
         <div
           aria-hidden
           className={cx("resize", header.column.getIsResizing() && "resizing")}
+          title="Drag to resize, double-click to fit"
           // Resizing is not a selection.
           onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={header.getResizeHandler()}
-          onTouchStart={header.getResizeHandler()}
-          onDoubleClick={() => header.column.resetSize()}
+          onMouseDown={sheet.getColumnResizeHandler(columnId)}
+          onTouchStart={sheet.getColumnResizeHandler(columnId)}
+          onDoubleClick={() => sheet.fitColumn(columnId)}
         />
       )}
     </div>
   )
 })
+
+function HeaderContent({
+  columnIndex,
+  title,
+}: {
+  columnIndex: number
+  title: string
+}) {
+  return (
+    <>
+      <span aria-hidden className="letter">
+        {columnLetter(columnIndex)}
+      </span>
+      <span className="title">{title}</span>
+    </>
+  )
+}
 
 type RowProps = {
   sheet: AnySheet
@@ -359,12 +385,23 @@ const SheetRowView = memo(function SheetRowView({
         {(rowIndex + 1).toLocaleString("en-US")}
       </div>
       {startColumns.map((c, i) =>
-        cell(c.id, i, c.getSize(), GUTTER_WIDTH + c.getStart("start"))
+        cell(
+          c.id,
+          i,
+          sheet.getColumnWidth(c.id),
+          GUTTER_WIDTH + c.getStart("start")
+        )
       )}
       <div aria-hidden style={{ width: leftSpacer, flex: "none" }} />
       {virtualColumns.map((v) => {
         const c = centerColumns[v.index]
-        return c ? cell(c.id, startColumns.length + v.index, c.getSize()) : null
+        return c
+          ? cell(
+              c.id,
+              startColumns.length + v.index,
+              sheet.getColumnWidth(c.id)
+            )
+          : null
       })}
     </div>
   )
@@ -496,6 +533,58 @@ function Editor({
       )}
     </>
   )
+}
+
+/**
+ * Measures a column as it renders, for `sheet.fitColumn`: its header and the
+ * cells of `rows` are drawn off screen inside the grid, with the grid's own
+ * markup and classes, and the widest one wins. Each distinct text is drawn
+ * once, so a column of a few options costs a few elements.
+ */
+function measureColumn(
+  host: HTMLElement,
+  sheet: AnySheet,
+  column: Column<Record<string, unknown>>,
+  rows: readonly Record<string, unknown>[]
+): number {
+  const numeric = column.type === "number"
+  const seen = new Set<string>()
+  const cells: ReactElement[] = []
+  for (const row of rows) {
+    const value = getCellValue(column, row)
+    const text = formatCell(column, value)
+    if (seen.has(text)) continue
+    seen.add(text)
+    cells.push(
+      <div key={text} className={cx("cell", numeric && "numeric")}>
+        <CellContent column={column} value={value} />
+      </div>
+    )
+  }
+  const box = document.createElement("div")
+  box.className = "measure"
+  host.append(box)
+  const root = createRoot(box)
+  flushSync(() =>
+    root.render(
+      <>
+        <div className={cx("head-cell", numeric && "numeric")}>
+          <HeaderContent
+            columnIndex={sheet.columnIndexOf(column.id)}
+            title={column.header}
+          />
+        </div>
+        {cells}
+      </>
+    )
+  )
+  let width = 0
+  for (const element of box.children) {
+    width = Math.max(width, element.getBoundingClientRect().width)
+  }
+  root.unmount()
+  box.remove()
+  return width
 }
 
 /**

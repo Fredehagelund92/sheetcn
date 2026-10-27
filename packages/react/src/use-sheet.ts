@@ -5,6 +5,7 @@ import {
   type CellValue,
   type Change,
   type Column,
+  type ColumnSizing,
   type SheetStore,
 } from "@sheetcn/core"
 import {
@@ -43,6 +44,15 @@ export type UseSheetOptions<Row extends RowData> = {
   onSelectionChange?: (ranges: CellRange[]) => void
   /** Most undo steps kept. Default 500. */
   historyLimit?: number
+  /**
+   * How columns use the grid's width. "fixed" (the default): each column
+   * keeps its width. "fill": each column's width is its minimum, and the
+   * spare width is shared out in proportion to each column's `grow` (by
+   * default its width), so the last column ends at the right edge. Pinned
+   * columns never grow, and when the minimums do not fit, the grid scrolls.
+   * Fill needs the grid's width, which `useSheetColumnVirtualizer` measures.
+   */
+  sizing?: ColumnSizing
 }
 
 const noSubscription = () => () => {}
@@ -60,13 +70,15 @@ function toColumnDefs<Row extends RowData>(
     accessorFn: (row: Row): CellValue => getCellValue(column, row),
     size: column.width ?? DEFAULT_WIDTH,
     minSize: column.minWidth ?? DEFAULT_MIN_WIDTH,
+    ...(column.maxWidth === undefined ? {} : { maxSize: column.maxWidth }),
   }))
 }
 
 /**
  * Creates a sheet: the core store (rows, transactions, history) wired to a
- * TanStack table with cell selection, sizing, resizing and pinning. The
- * returned API is stable for the life of the component.
+ * TanStack table with cell selection, sizing, resizing and pinning, and
+ * "fixed" or "fill" column sizing with fit to content. The returned API is
+ * stable for the life of the component.
  *
  * Rendering stays cheap at 100,000 rows: a one-cell commit rebuilds only the
  * changed row (see `createSheetCoreRowModel`), and this hook re-renders only
@@ -151,11 +163,21 @@ export function useSheet<Row extends RowData>(
     })
   )
 
-  const [sheet] = useState(
-    () => new SheetController<Row>({ table, store, columns: options.columns })
-  )
-  sheet.update({ table, store, columns: options.columns })
+  const source = {
+    table,
+    store,
+    columns: options.columns,
+    sizing: options.sizing ?? "fixed",
+  }
+  const [sheet] = useState(() => new SheetController<Row>(source))
+  sheet.update(source)
   latest.attach(sheet)
+  // Fill widths follow the grid's width, which is not TanStack state.
+  useSyncExternalStore(
+    sheet.subscribeLayout,
+    sheet.getLayoutVersion,
+    sheet.getLayoutVersion
+  )
   return sheet
 }
 

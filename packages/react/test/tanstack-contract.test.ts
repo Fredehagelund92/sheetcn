@@ -367,3 +367,49 @@ describe("the sheet core row model", () => {
     expect(moved.rowsById.r0?.getDisplayIndex()).toBe(1)
   })
 })
+
+describe("column sizing and resizing", () => {
+  const sized = () =>
+    renderHook(
+      () =>
+        useTable({
+          features: sheetFeatures,
+          columns: baseColumns,
+          data: make(2),
+          getRowId: (r: R) => r.id,
+        }),
+      null
+    ).result.current
+
+  // getColumnResizeHandler sets a column's size and starts TanStack's drag in
+  // the same event, so the drag must read the size just set.
+  it("reads a size set in the same event, before any render", () => {
+    const table = sized()
+    inAct(() => {
+      table.setColumnSizing((old) => ({ ...old, c0: 210 }))
+      expect(table.getColumn("c0")?.getSize()).toBe(210)
+    })
+  })
+
+  it("starts a drag from the size the column has when the handler runs", () => {
+    const table = sized()
+    const header = table.getFlatHeaders().find((h) => h.column.id === "c1")
+    inAct(() => {
+      table.setColumnSizing((old) => ({ ...old, c1: 180 }))
+      header?.getResizeHandler()(new MouseEvent("mousedown", { clientX: 50 }))
+    })
+    inAct(() => {
+      document.dispatchEvent(new MouseEvent("mousemove", { clientX: 75 }))
+      document.dispatchEvent(new MouseEvent("mouseup", { clientX: 75 }))
+    })
+    expect(table.getColumn("c1")?.getSize()).toBe(205)
+  })
+
+  it("keeps a size set in state, and drops it on resetSize", () => {
+    const table = sized()
+    inAct(() => table.setColumnSizing({ c2: 99 }))
+    expect(table.atoms.columnSizing.get()).toEqual({ c2: 99 })
+    inAct(() => table.getColumn("c2")?.resetSize())
+    expect("c2" in table.atoms.columnSizing.get()).toBe(false)
+  })
+})

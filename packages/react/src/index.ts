@@ -7,6 +7,7 @@ export {
 export { createSheetCoreRowModel } from "./row-model.js"
 export {
   SheetController,
+  type ColumnMeasurer,
   type EditState,
   type KeyboardEventLike,
   type SelectMode,

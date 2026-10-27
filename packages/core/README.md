@@ -1,5 +1,5 @@
 # @sheetcn/core
 
-The headless core of [sheetcn](https://github.com/Fredehagelund92/sheetcn): column schema, cell values (parse, format, validate), a row store with transactions and undo, selection geometry and the keyboard map. Plain TypeScript with no React, DOM or TanStack dependency.
+The headless core of [sheetcn](https://github.com/Fredehagelund92/sheetcn): column schema, cell values (parse, format, validate), a row store with transactions and undo, selection geometry, the keyboard map and the column fill math. Plain TypeScript with no React, DOM or TanStack dependency.
 
 Early work, not yet published. See the [repository README](https://github.com/Fredehagelund92/sheetcn#readme) for status and API notes.

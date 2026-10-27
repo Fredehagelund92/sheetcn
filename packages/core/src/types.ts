@@ -28,8 +28,18 @@ export type Column<Row, V extends CellValue = CellValue> = {
   /** Returns a new row with the value written. Omit it to make the column read-only. */
   write?(this: void, row: Row, next: V | null): Row
   readOnly?: boolean | ((row: Row) => boolean)
+  /** Its width in pixels. With "fill" sizing, also the least it is given. */
   width?: number
+  /** The least it can be resized or fitted to. */
   minWidth?: number
+  /** The most it can be resized, fitted or grown to. */
+  maxWidth?: number
+  /**
+   * With "fill" sizing, its share of the spare width against the other
+   * columns. Default: its width. 0 keeps it at its width. Pinned columns
+   * never grow.
+   */
+  grow?: number
   pin?: "start"
   /** The choices of a select column. */
   options?: SelectOption[]

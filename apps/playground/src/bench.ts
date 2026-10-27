@@ -152,12 +152,58 @@ export function armKeyTimings(sheet: Sheet<Record<string, unknown>>) {
   }
 }
 
+export type ScrollStats = {
+  frames: number
+  /** Frames per second over the whole run. */
+  fps: number
+  /** Work per frame: the scroll, React's render, style, layout and paint. */
+  work: Stats
+  /** Frames that took longer than one 60 Hz frame (16.7 ms). */
+  slowFrames: number
+}
+
+/**
+ * Scrolls the grid `frames` times, `step` pixels down each frame (three rows
+ * by default), and times each frame's work as `timeToPaint` does. A frame
+ * keeps up with 60 Hz when its work stays under 16.7 ms.
+ */
+export async function measureScroll(
+  frames = 300,
+  { step = 96 } = {}
+): Promise<ScrollStats> {
+  const grid = document.querySelector<HTMLElement>("[role=grid]")
+  if (!grid) throw new Error("There is no grid")
+  grid.scrollTop = 0
+  await nextPaint()
+  const times: number[] = []
+  const start = performance.now()
+  for (let i = 0; i < frames; i++) {
+    times.push(
+      await timeToPaint(() => {
+        grid.scrollTop += step
+        // Send the scroll event now, so the render it causes lands in this
+        // frame; the browser would send it with the next one.
+        grid.dispatchEvent(new Event("scroll"))
+      })
+    )
+  }
+  const elapsed = performance.now() - start
+  return {
+    frames,
+    fps: round((frames * 1000) / elapsed),
+    work: stats(times, 0),
+    slowFrames: times.filter((t) => t > 1000 / 60).length,
+  }
+}
+
 export function installBench(sheet: Sheet<Record<string, unknown>>) {
   const api = {
     sheet,
     renderCount,
     measureCommits: (runs?: number, options?: { enter?: boolean }) =>
       measureCommits(sheet, runs, options),
+    measureScroll: (frames?: number, options?: { step?: number }) =>
+      measureScroll(frames, options),
     armKeyTimings: () => armKeyTimings(sheet),
     dom: () => {
       const grid = document.querySelector("[role=grid]")
