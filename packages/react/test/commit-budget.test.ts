@@ -30,8 +30,11 @@ function makeRows(): Row[] {
 
 describe(`one-cell commit through useSheet on ${ROWS.toLocaleString("en")} rows`, () => {
   it("builds one new Row and reuses all the others", () => {
+    // Built once: the host renders again on the commit, and building 100,000
+    // rows there would be timed as part of it.
+    const rows = makeRows()
     const { result, unmount } = renderHook(
-      () => useSheet<Row>({ columns, getRowId, defaultData: makeRows() }),
+      () => useSheet<Row>({ columns, getRowId, defaultData: rows }),
       undefined
     )
     const sheet = () => result.current
