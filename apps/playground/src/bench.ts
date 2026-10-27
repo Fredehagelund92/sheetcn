@@ -80,7 +80,8 @@ export async function measureCommits(
       anchor: { rowIndex, columnIndex: column },
       focus: { rowIndex, columnIndex: column },
     })
-    sheet.startEdit("replace", String(100 + i + Math.random()))
+    // Two decimals: the price column is money in USD, which has two.
+    sheet.startEdit("replace", (100 + i + Math.random()).toFixed(2))
     await nextPaint()
     const editor = document.activeElement
     const before = renderCount.rows
@@ -91,6 +92,11 @@ export async function measureCommits(
         )
       } else sheet.commitEdit(null)
     })
+    if (sheet.getState().editing) {
+      throw new Error(
+        `The commit did not parse: ${sheet.getState().editing?.error ?? ""}`
+      )
+    }
     // The first runs warm up.
     if (i >= 3) {
       times.push(time)

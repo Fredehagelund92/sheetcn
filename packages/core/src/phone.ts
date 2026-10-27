@@ -23,13 +23,39 @@ export type PhoneOptions = {
 
 // What `prepare` builds. The library's own types stay out of this entry's
 // public types, so a project can type-check without them.
-type PreparedPhone = { defaultCountry: string | undefined }
+type PreparedPhone = {
+  defaultCountry: string | undefined
+  /**
+   * What the library says of each stored number shown so far: parsing one
+   * takes tens of microseconds, and cells show the same numbers again as
+   * rows re-render. Emptied when it grows past `CACHE_LIMIT`.
+   */
+  stored: Map<string, Stored>
+}
 
-// Takes any stored value, since a cell may hold one of another shape.
-function read(text: unknown, p: PreparedPhone): PhoneNumber | undefined {
-  return typeof text === "string"
-    ? parsePhoneNumber(text, p.defaultCountry as CountryCode | undefined)
-    : undefined
+type Stored = { shown: string; possible: boolean }
+
+const CACHE_LIMIT = 10_000
+
+/** A stored number as the library reads it, or null when it cannot. */
+function stored(value: unknown, p: PreparedPhone): Stored | null {
+  if (typeof value !== "string") return null
+  let entry = p.stored.get(value)
+  if (!entry) {
+    const number = read(value, p)
+    if (!number) return null
+    entry = {
+      shown: number.formatInternational(),
+      possible: number.isPossible(),
+    }
+    if (p.stored.size >= CACHE_LIMIT) p.stored.clear()
+    p.stored.set(value, entry)
+  }
+  return entry
+}
+
+function read(text: string, p: PreparedPhone): PhoneNumber | undefined {
+  return parsePhoneNumber(text, p.defaultCountry as CountryCode | undefined)
 }
 
 function parsePhone(
@@ -77,19 +103,20 @@ export const phoneType = defineColumnType<
   ...phoneShapeType,
   defaultOptions: { defaultCountry: null },
   prepare: ({ defaultCountry }) => {
-    if (defaultCountry === null) return { defaultCountry: undefined }
+    const stored = new Map<string, Stored>()
+    if (defaultCountry === null) return { defaultCountry: undefined, stored }
     const code = defaultCountry.toUpperCase()
     if (!isSupportedCountry(code)) {
       throw new Error(`"${defaultCountry}" is not a country with phone numbers`)
     }
-    return { defaultCountry: code }
+    return { defaultCountry: code, stored }
   },
   parse: parsePhone,
-  format: (value, p) => read(value, p)?.formatInternational() ?? asText(value),
+  format: (value, p) => stored(value, p)?.shown ?? asText(value),
   validate: (value, p) => {
     const issue = phoneShapeType.validate?.(value, {}, null)
     if (issue) return issue
-    return read(value, p)?.isPossible()
+    return stored(value, p)?.possible
       ? null
       : { message: "Not a possible phone number" }
   },
