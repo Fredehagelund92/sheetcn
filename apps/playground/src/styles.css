@@ -4,6 +4,12 @@
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.48 0 0);
   --border: oklch(0.922 0 0);
+  /*
+   * The lines between cells. Darker than --border, which frames the toolbars,
+   * so columns stay apart in a wide grid: at least 1.5:1 against the cells
+   * (e2e/gridlines.spec.ts checks it).
+   */
+  --sheet-grid-line: oklch(0.82 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   /* Selection outline, tint and active cell. */
   --accent: oklch(0.546 0.215 262.9);
@@ -22,6 +28,7 @@
     --muted: oklch(0.269 0 0);
     --muted-foreground: oklch(0.74 0 0);
     --border: oklch(0.3 0 0);
+    --sheet-grid-line: oklch(0.4 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --accent: oklch(0.707 0.165 254.6);
     --chip: oklch(0.28 0 0);
@@ -168,8 +175,11 @@ button:focus-visible {
   border-radius: 6px 0 0 6px;
 }
 
-.segmented button:last-child {
+.segmented button + button {
   margin-left: -1px;
+}
+
+.segmented button:last-child {
   border-radius: 0 6px 6px 0;
 }
 
@@ -239,6 +249,25 @@ button:focus-visible {
   font-size: 13px;
 }
 
+/*
+ * Gridlines hide a line by making it transparent rather than removing it, so
+ * the columns keep their widths and the cell background (and the selection
+ * tint) fills the gap. The header's bottom line, the row numbers' edge and the
+ * pinned columns' edge always show.
+ */
+.grid-scroll {
+  --sheet-row-line: var(--sheet-grid-line);
+  --sheet-column-line: var(--sheet-grid-line);
+}
+
+.grid-scroll:is([data-gridlines="none"], [data-gridlines="columns"]) {
+  --sheet-row-line: transparent;
+}
+
+.grid-scroll:is([data-gridlines="none"], [data-gridlines="rows"]) {
+  --sheet-column-line: transparent;
+}
+
 .grid-scroll:focus {
   outline: none;
 }
@@ -281,9 +310,17 @@ button:focus-visible {
   display: flex;
   align-items: center;
   background: var(--header);
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--sheet-grid-line);
+  border-bottom: 1px solid var(--sheet-grid-line);
   font-size: 12px;
+}
+
+.head-cell {
+  border-right-color: var(--sheet-column-line);
+}
+
+.gutter {
+  border-bottom-color: var(--sheet-row-line);
 }
 
 .corner {
@@ -366,8 +403,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   padding: 0 8px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--sheet-column-line);
+  border-bottom: 1px solid var(--sheet-row-line);
   white-space: nowrap;
   background: var(--background);
 }
@@ -382,7 +419,7 @@ button:focus-visible {
 }
 
 .pinned-last {
-  border-right-width: 2px;
+  border-right: 2px solid var(--sheet-grid-line);
 }
 
 .cell.numeric {

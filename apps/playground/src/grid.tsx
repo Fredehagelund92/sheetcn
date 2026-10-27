@@ -38,6 +38,17 @@ export const ROW_HEIGHT = 32
 export const HEADER_HEIGHT = 34
 export const GUTTER_WIDTH = 64
 
+/** The lines drawn between cells. */
+export type Gridlines = "none" | "rows" | "columns" | "both"
+
+/** The grid's preset: a sheet draws every line, a table only the rows. */
+export type GridMode = "sheet" | "table"
+
+export const DEFAULT_GRIDLINES: Record<GridMode, Gridlines> = {
+  sheet: "both",
+  table: "rows",
+}
+
 type AnySheet = Sheet<Record<string, unknown>>
 type VirtualItem = ReturnType<
   ReturnType<typeof useSheetColumnVirtualizer>["getVirtualItems"]
@@ -68,9 +79,18 @@ const SCROLLS = new Set<SheetCommand["type"]>([
 export function SheetGrid({
   sheet,
   label,
+  mode = "sheet",
+  gridlines = DEFAULT_GRIDLINES[mode],
 }: {
   sheet: AnySheet
   label: string
+  mode?: GridMode
+  /**
+   * The lines between cells. The header's bottom line, the row numbers' edge
+   * and the pinned columns' edge always show. Set as one attribute on the
+   * grid, so changing it renders no rows.
+   */
+  gridlines?: Gridlines
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const { table } = sheet
@@ -150,6 +170,7 @@ export function SheetGrid({
       aria-colcount={startColumns.length + centerColumns.length + 1}
       aria-multiselectable="true"
       className="grid-scroll"
+      data-gridlines={gridlines}
       tabIndex={-1}
       onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}

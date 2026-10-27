@@ -10,7 +10,13 @@ import { useEffect, useState } from "react"
 
 import { installBench, measureCommits, type Stats } from "./bench"
 import { columns, getRowId, makeItems } from "./data"
-import { SheetGrid, columnLetter } from "./grid"
+import {
+  DEFAULT_GRIDLINES,
+  SheetGrid,
+  columnLetter,
+  type GridMode,
+  type Gridlines,
+} from "./grid"
 
 const params = new URLSearchParams(location.search)
 const ROWS = Math.max(0, Number(params.get("rows") ?? 100_000) || 0)
@@ -19,6 +25,18 @@ const data = makeItems(ROWS)
 const COLUMNS = Math.max(1, Number(params.get("columns")) || columns.length)
 const shownColumns = columns.slice(0, COLUMNS)
 const SIZING: ColumnSizing = params.get("sizing") === "fill" ? "fill" : "fixed"
+// ?mode=table starts with the table's gridlines, ?gridlines=columns with those.
+const MODE: GridMode = params.get("mode") === "table" ? "table" : "sheet"
+const GRIDLINES: Record<Gridlines, string> = {
+  none: "None",
+  rows: "Rows",
+  columns: "Columns",
+  both: "Both",
+}
+const startGridlines =
+  (Object.keys(GRIDLINES) as Gridlines[]).find(
+    (g) => g === params.get("gridlines")
+  ) ?? DEFAULT_GRIDLINES[MODE]
 
 type AnySheet = Sheet<Record<string, unknown>>
 
@@ -27,6 +45,7 @@ export function App() {
   // The grid's share of the window's width, to show "fill" without resizing
   // the window.
   const [frame, setFrame] = useState(100)
+  const [gridlines, setGridlines] = useState(startGridlines)
   const typed = useSheet({
     columns: shownColumns,
     getRowId,
@@ -58,6 +77,8 @@ export function App() {
         sheet={sheet}
         onMeasure={() => void measure()}
         measuring={measuring}
+        gridlines={gridlines}
+        onGridlines={setGridlines}
       />
       <ColumnBar
         sheet={sheet}
@@ -71,7 +92,12 @@ export function App() {
           className={frame < 100 ? "grid-frame framed" : "grid-frame"}
           style={{ width: `${frame}%` }}
         >
-          <SheetGrid sheet={sheet} label="Items" />
+          <SheetGrid
+            sheet={sheet}
+            label="Items"
+            mode={MODE}
+            gridlines={gridlines}
+          />
         </div>
       </main>
       <StatusBar sheet={sheet} stats={stats} />
@@ -83,10 +109,14 @@ function Toolbar({
   sheet,
   onMeasure,
   measuring,
+  gridlines,
+  onGridlines,
 }: {
   sheet: AnySheet
   onMeasure: () => void
   measuring: boolean
+  gridlines: Gridlines
+  onGridlines: (gridlines: Gridlines) => void
 }) {
   const history = useSheetHistory(sheet)
   const address = useSheetSelection(sheet, (s) => {
@@ -114,6 +144,21 @@ function Toolbar({
       <button type="button" disabled={measuring} onClick={onMeasure}>
         {measuring ? "Measuring..." : "Measure commit"}
       </button>
+      <span aria-hidden className="muted">
+        Grid lines
+      </span>
+      <div role="group" aria-label="Grid lines" className="segmented">
+        {(Object.keys(GRIDLINES) as Gridlines[]).map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={gridlines === value}
+            onClick={() => onGridlines(value)}
+          >
+            {GRIDLINES[value]}
+          </button>
+        ))}
+      </div>
       <span className="muted hint">
         Click, Shift+click or drag to select. Enter or type to edit.
       </span>

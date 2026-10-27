@@ -20,6 +20,7 @@
   <a href="#numbers">Numbers</a> ·
   <a href="#table-and-sheet">Table and sheet</a> ·
   <a href="#column-sizing">Column sizing</a> ·
+  <a href="#gridlines">Gridlines</a> ·
   <a href="#status">Status</a> ·
   <a href="#development">Development</a> ·
   <a href="apps/playground">Playground</a>
@@ -33,6 +34,7 @@
 - **One change for every mutation**: each edit, toggle, clear, undo and redo reaches your app as one `Change`, so saving it is one function.
 - **Undo and redo**: transactions are single steps, and a burst of typing undoes at once.
 - **Column sizing**: fixed widths, or fill the grid's width and scroll when the columns do not fit. Double-click a column's edge to fit it to its content.
+- **Gridlines**: lines between rows, columns, both or none, in their own colour so columns stay apart in a wide grid.
 - **Fast at 100,000 rows**: rows and columns are virtualized, and a one-cell commit rebuilds only the row it changed.
 - **Controlled or not**: the sheet can keep the rows, or your state can, with `applyChange`.
 - **Headless core**: the schema, values, store, selection and key map are plain TypeScript, with no React and no DOM.
@@ -149,6 +151,31 @@ export function FilledItems({ items }: { items: Item[] }) {
 - Double-click a column's right edge, or call `sheet.fitColumn(id)`, to fit the column to its content: the widest of its header, the rows on screen and up to 500 rows in all, spread over the rest, within its `minWidth` and `maxWidth`. `sheet.fitAllColumns()` fits every column. Sampling keeps a fit at 100,000 rows to a few milliseconds.
 - With fill, a column the user resizes or fits keeps that width, and the other columns share the rest. `fitAllColumns` makes the fitted widths the minimums and lets every column grow again, so the grid still fills. Resetting its size (`sheet.table.getColumn(id)?.resetSize()`) lets it grow again.
 - The playground shows both: `?columns=9` keeps the columns narrow enough to fill a wide screen, the toolbar switches between fixed widths and fill, and the grid width slider narrows the grid as resizing the window would.
+
+## Gridlines
+
+The lines between cells have their own colour token, `--sheet-grid-line`. It is darker than `--border`, the softer colour that frames the toolbars, so columns stay apart in a grid with many columns. It keeps at least 1.5:1 contrast against the cells, selected cells and the header, in light and dark ([`gridlines.spec.ts`](apps/playground/e2e/gridlines.spec.ts) checks it in the browser).
+
+The playground's grid takes a `gridlines` option:
+
+| Value     | Lines drawn between cells |
+| --------- | ------------------------- |
+| `none`    | none                      |
+| `rows`    | between rows              |
+| `columns` | between columns           |
+| `both`    | between rows and columns  |
+
+The default follows the grid's `mode`: `both` for `sheet` and `rows` for `table`. The header's bottom line, the row numbers' edge and the thicker edge of the pinned columns always show.
+
+```tsx
+<SheetGrid sheet={sheet} label="Items" /> // a sheet: every line
+<SheetGrid sheet={sheet} label="Items" mode="table" /> // a table: rows only
+<SheetGrid sheet={sheet} label="Items" gridlines="columns" />
+```
+
+- A hidden line is a transparent border, not a missing one, so switching moves no column, fill sizing is unchanged, and the selection tint fills the gap.
+- The value is one attribute on the grid, so switching it renders no rows.
+- In the playground, `?mode=table` starts with the table's lines, `?gridlines=none` (or `rows`, `columns`, `both`) with those, and the toolbar switches between all four.
 
 ## Status
 
@@ -322,7 +349,7 @@ pnpm --filter @sheetcn/playground dev      # http://localhost:5173, ?rows=1000 f
 pnpm --filter @sheetcn/playground build && pnpm --filter @sheetcn/playground preview
 ```
 
-`?columns=9` shows the first nine columns, and `?sizing=fill` starts in fill; the toolbar switches sizing, fits columns and narrows the grid.
+`?columns=9` shows the first nine columns, and `?sizing=fill` starts in fill; the toolbar switches sizing, fits columns and narrows the grid. `?mode=table` and `?gridlines=` set the lines between cells (see [Gridlines](#gridlines)).
 
 Measure on the production build. "Measure commit" (or `__playground.measureCommits(50)` in the console) commits one cell 50 times from an open editor and reports the time from each commit to the frame that shows it. Each commit starts at the beginning of a frame, so the number is the work (commit, render, style, layout and paint) without the wait for the next frame. `measureCommits(50, { enter: true })` dispatches Enter on the editor instead, so it also moves the selection and focus. The gate: under 5 ms at 100,000 rows, and under 25 ms with the CPU slowed 4 times in the browser's developer tools. `measureScroll(300)` scrolls three rows a frame for 300 frames and reports the frame rate and the work per frame; the gate is 60 fps.
 
