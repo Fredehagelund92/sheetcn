@@ -127,7 +127,9 @@ test("the grid width slider narrows the grid, and fill follows it", async ({
   await expect
     .poll(async () => {
       const at = await layout(page)
-      return at.clientWidth < 1440 && Math.abs(at.lastRight - at.gridRight) < 0.5
+      return (
+        at.clientWidth < 1440 && Math.abs(at.lastRight - at.gridRight) < 0.5
+      )
     })
     .toBe(true)
 })
