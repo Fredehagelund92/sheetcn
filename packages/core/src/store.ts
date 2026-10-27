@@ -1,5 +1,7 @@
+import { cellsEqual } from "./cells.js"
 import { applyChange, invertChange, type ChangeContext } from "./change.js"
 import { assertColumns, getCellValue } from "./columns.js"
+import { builtInTypeRegistry, type TypeRegistry } from "./registry.js"
 import { indexFor } from "./row-index.js"
 import type {
   CellValue,
@@ -13,6 +15,11 @@ import type {
 export type SheetStoreOptions<Row> = ChangeContext<Row> & {
   /** The rows to start with. They are never mutated. */
   rows: readonly Row[]
+  /**
+   * The column types this sheet can use. Every column's type must be the
+   * one these define under its id. Default: the built-in types.
+   */
+  types?: TypeRegistry
   /**
    * When true, the store never changes its own rows. Each change goes to
    * `onChange`, and the app applies it (with `applyChange`) and passes the
@@ -59,7 +66,7 @@ export type SheetStore<Row> = {
    * Builds one change from the operations `build` collects and commits it as
    * one undo step and one `onChange` call. `from` values are filled in, cells
    * set more than once keep one patch, and cells set to their current value
-   * are dropped. Returns the change, or null when nothing changes. If `build`
+   * (by the type's `equals`) are dropped. Returns the change, or null when nothing changes. If `build`
    * throws, nothing is applied.
    */
   transaction(
@@ -101,7 +108,7 @@ class Store<Row> implements SheetStore<Row> {
   readonly #options: SheetStoreOptions<Row>
 
   constructor(options: SheetStoreOptions<Row>) {
-    assertColumns(options.columns)
+    assertColumns(options.columns, options.types ?? builtInTypeRegistry)
     this.#options = options
     this.#ctx = { columns: options.columns, getRowId: options.getRowId }
     this.#rows = options.rows
@@ -189,7 +196,7 @@ class Store<Row> implements SheetStore<Row> {
 
     const change: Change<Row> = {
       source,
-      patches: [...patches.values()].filter((p) => !Object.is(p.from, p.to)),
+      patches: [...patches.values()].filter((p) => !this.#same(p)),
     }
     if (insertedRows.length) change.insertedRows = insertedRows
     if (removes.length) change.removedRowIds = [...new Set(removes)]
@@ -243,6 +250,11 @@ class Store<Row> implements SheetStore<Row> {
     this.#notify()
   }
 
+  /** True when a patch writes the value the cell already has. */
+  #same(patch: Patch): boolean {
+    return cellsEqual(this.#column(patch.columnId), patch.from, patch.to)
+  }
+
   #column(columnId: string): Column<Row> {
     const column = this.#columns.get(columnId)
     if (!column) throw new Error(`There is no column "${columnId}"`)
@@ -280,7 +292,7 @@ class Store<Row> implements SheetStore<Row> {
       sameCells(top.forward.patches, change.patches)
     ) {
       mergeInto(top, change, now)
-      if (top.forward.patches.every((p) => Object.is(p.from, p.to))) {
+      if (top.forward.patches.every((p) => this.#same(p))) {
         this.#undo.pop()
         this.#mergeable = false
       }

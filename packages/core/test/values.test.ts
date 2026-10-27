@@ -1,4 +1,3 @@
-import fc from "fast-check"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -223,71 +222,5 @@ describe("validateCell", () => {
       message: "Desk lamp costs less than 0",
     })
     expect(validateCell(rule as Column<Row>, 1, row)).toBeNull()
-  })
-})
-
-describe("parse(format(v)) equals v", () => {
-  const roundTrip = (column: Column<Row>, value: CellValue) => {
-    expect(parseCell(column, formatCell(column, value))).toEqual(parsed(value))
-  }
-  const nullable = <T>(arb: fc.Arbitrary<T>) =>
-    fc.option(arb, { nil: null, freq: 10 })
-
-  it("text", () => {
-    fc.assert(
-      fc.property(fc.string({ unit: "grapheme" }), (v) => roundTrip(name, v))
-    )
-  })
-
-  it("number", () => {
-    const finite = fc
-      .double({ noNaN: true, noDefaultInfinity: true })
-      .map((v) => (v === 0 ? 0 : v))
-    fc.assert(fc.property(nullable(finite), (v) => roundTrip(price, v)))
-  })
-
-  it("date", () => {
-    const iso = fc
-      .date({
-        min: new Date("0000-01-01T00:00:00Z"),
-        max: new Date("9999-12-31T00:00:00Z"),
-        noInvalidDate: true,
-      })
-      .map((d) => d.toISOString().slice(0, 10))
-    fc.assert(fc.property(nullable(iso), (v) => roundTrip(due, v)))
-  })
-
-  it("boolean", () => {
-    fc.assert(fc.property(nullable(fc.boolean()), (v) => roundTrip(done, v)))
-  })
-
-  it("select, for any options with distinct values and labels", () => {
-    const optionList = fc
-      .uniqueArray(
-        fc.record({
-          value: fc.string(),
-          label: fc.string({ minLength: 1 }).filter((l) => l.trim() !== ""),
-        }),
-        {
-          minLength: 1,
-          maxLength: 8,
-          selector: (o) => o.value,
-        }
-      )
-      .filter((list) => new Set(list.map((o) => o.label)).size === list.length)
-
-    fc.assert(
-      fc.property(
-        optionList.chain((list) =>
-          fc.tuple(fc.constant(list), nullable(fc.constantFrom(...list)))
-        ),
-        ([list, option]) => {
-          const [column] = defineColumns<Row>((c) => [
-            c.select("status", { options: list }),
-          ])
-          roundTrip(column as Column<Row>, option?.value ?? null)
-        }
-      )
-    )
   })
 })

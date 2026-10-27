@@ -40,6 +40,19 @@ describe("defineColumns", () => {
   ])
   const byId = (id: string) => columns.find((c) => c.id === id) as Column<Item>
 
+  it("keeps a select's options as its type options", () => {
+    const [status] = defineColumns<Item>((c) => [
+      c.select("sku", { header: "SKU", options: [{ value: "a", label: "A" }] }),
+    ])
+    expect(status).toMatchObject({
+      id: "sku",
+      header: "SKU",
+      type: "select",
+      typeOptions: { options: [{ value: "a", label: "A" }] },
+    })
+    expect(status).not.toHaveProperty("options")
+  })
+
   it("returns plain columns with ids, headers and types", () => {
     expectTypeOf(columns).toEqualTypeOf<Column<Item>[]>()
     expect(columns.map((c) => [c.id, c.header, c.type])).toEqual([
@@ -90,8 +103,10 @@ describe("defineColumns", () => {
         c.number("missing"),
         // @ts-expect-error format receives a number for a number column
         c.number("price", { format: (v: string) => v }),
-        // @ts-expect-error a select column needs its options
-        c.select("name"),
+        // @ts-expect-error a select's options are a list
+        c.select("name", { options: "a, b" }),
+        // @ts-expect-error a number type has no options
+        c.number("price", { options: [] }),
       ])
     expect(typeof check).toBe("function")
   })
@@ -110,23 +125,39 @@ describe("assertColumns", () => {
   it("rejects repeated or empty option labels and values", () => {
     const select = (options: { value: string; label: string }[]) => () =>
       assertColumns<Item>([
-        { id: "s", header: "S", type: "select", value: "name", options },
+        {
+          id: "s",
+          header: "S",
+          type: "select",
+          value: "name",
+          typeOptions: { options },
+        },
       ])
     expect(
       select([
         { value: "a", label: "A" },
         { value: "b", label: "A" },
       ])
-    ).toThrow('Column "s" has two options')
+    ).toThrow('Column "s": Two options have the value "b" or the label "A"')
     expect(
       select([
         { value: "a", label: "A" },
         { value: "a", label: "B" },
       ])
-    ).toThrow('Column "s" has two options')
+    ).toThrow('Column "s": Two options have the value "a"')
     expect(select([{ value: "a", label: " " }])).toThrow(
-      'Column "s" has an option with no label'
+      'Column "s": An option has no label'
     )
     expect(select([{ value: "a", label: "A" }])).not.toThrow()
+  })
+
+  it("rejects a type that is not built in, unless a registry built the column", () => {
+    expect(() =>
+      assertColumns<Item>([
+        { id: "r", header: "R", type: "rating", value: "price" },
+      ])
+    ).toThrow(
+      'Column "r" has the type "rating", which is not built in; build the column with the registry that defines it'
+    )
   })
 })

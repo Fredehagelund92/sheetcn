@@ -4,6 +4,7 @@ import {
   getCellValue,
   isCellReadOnly,
   rectsContain,
+  resolveColumnType,
   validateCell,
   type CellValue,
   type Column,
@@ -284,7 +285,7 @@ const HeaderCell = memo(function HeaderCell({
         pinned && "pinned",
         last && "pinned-last",
         selected && "selected",
-        column?.type === "number" && "numeric"
+        column && isEndAligned(column) && "numeric"
       )}
       style={{ width, left }}
     >
@@ -485,7 +486,7 @@ function Cell({
         "cell",
         left !== undefined && "pinned",
         pinnedLast && "pinned-last",
-        column.type === "number" && "numeric",
+        isEndAligned(column) && "numeric",
         readOnly && "read-only",
         selected && !active && "selected"
       )}
@@ -506,7 +507,7 @@ function CellContent({
   column: Column<Record<string, unknown>>
   value: CellValue
 }) {
-  if (column.type === "boolean") {
+  if (resolveColumnType(column).def.edit === "toggle") {
     return (
       <span className={cx("check", value === true && "on")}>
         {value === true ? "Yes" : "No"}
@@ -568,7 +569,7 @@ function measureColumn(
   column: Column<Record<string, unknown>>,
   rows: readonly Record<string, unknown>[]
 ): number {
-  const numeric = column.type === "number"
+  const numeric = isEndAligned(column)
   const seen = new Set<string>()
   const cells: ReactElement[] = []
   for (const row of rows) {
@@ -624,6 +625,11 @@ function focusIfGridHasFocus(el: HTMLElement | null) {
   ) {
     el.focus({ preventScroll: true })
   }
+}
+
+/** Numbers and the like sit at the end of their cells. */
+function isEndAligned(column: Column<Record<string, unknown>>) {
+  return resolveColumnType(column).def.align === "end"
 }
 
 function cx(...names: (string | false | null | undefined)[]) {

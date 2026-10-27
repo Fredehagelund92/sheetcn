@@ -7,6 +7,7 @@ import {
   type Column,
   type ColumnSizing,
   type SheetStore,
+  type TypeRegistry,
 } from "@sheetcn/core"
 import {
   functionalUpdate,
@@ -27,6 +28,12 @@ export type UseSheetOptions<Row extends RowData> = {
    * component or memoize it): a new array starts a new store and history.
    */
   columns: readonly Column<Row>[]
+  /**
+   * The column types this sheet can use, from `createTypeRegistry`. Every
+   * column's type must be the one these define under its id. Default: the
+   * built-in types. Keep the same registry between renders.
+   */
+  types?: TypeRegistry
   /** A pure function of the row. Ids are unique and never change. */
   getRowId: (row: Row) => string
   /**
@@ -222,6 +229,7 @@ function makeStore<Row extends RowData>(
     getRowId: latest.getRowId,
     controlled: options.data !== undefined,
     onChange: latest.onChange,
+    ...(options.types === undefined ? {} : { types: options.types }),
     ...(options.historyLimit === undefined
       ? {}
       : { historyLimit: options.historyLimit }),

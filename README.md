@@ -31,6 +31,7 @@
 - **Spreadsheet selection**: click, drag, Shift to extend, Ctrl or Cmd to add ranges, whole rows and columns from the headers. Pointer events, so mouse, pen and touch all work.
 - **Spreadsheet keys**: arrows, jumps to the edge of the data, paging, Enter or typing to edit, Tab and Enter to commit and move, Escape to cancel, undo and redo.
 - **Typed columns**: text, number, date, select and boolean, each with parse, format and validate. Nothing is guessed: `1,5` and `3/4/2026` are rejected, not read one way or the other.
+- **Custom types**: define a type once (parse, format, validate, equals, compare, how it is edited) and use it in any column, through a registry you pass to the sheet.
 - **One change for every mutation**: each edit, toggle, clear, undo and redo reaches your app as one `Change`, so saving it is one function.
 - **Undo and redo**: transactions are single steps, and a burst of typing undoes at once.
 - **Column sizing**: fixed widths, or fill the grid's width and scroll when the columns do not fit. Double-click a column's edge to fit it to its content.
@@ -183,7 +184,7 @@ Early. Nothing is published to npm yet, and there is no component to install.
 
 What exists:
 
-- `@sheetcn/core`: the column schema, cell values (parse, format, validate), a row store with transactions and undo, selection geometry and the key map.
+- `@sheetcn/core`: the column schema, column types with a registry for your own, cell values (parse, format, validate), a row store with transactions and undo, selection geometry and the key map.
 - `@sheetcn/react`: `useSheet`, which wires the store to TanStack Table cell selection and TanStack Virtual, with keyboard commands, editing, pointer selection, focus, and column sizing with fit to content.
 - [The playground](apps/playground): a minimal grid on the binding at 100,000 rows, with the measurement harness.
 
@@ -236,14 +237,65 @@ store.undo()
 
 - `defineColumns` checks that each key holds the right kind of value, and returns plain `Column<Row>[]`. A column read by a function is read-only unless it has `write`.
 - Every cell may be empty (`null`). Empty cells format as `""`, and `format` never sees `null`.
-- `parseCell`, `formatCell` and `validateCell` use the column's own functions, or these defaults:
-  - **number**: accepts `1234.5`, `-12`, `1e21`, `$4.99`, `12%` and `1,234.50`. A comma is never read as a decimal mark, so `1,5` is rejected. A single comma group without a decimal point, such as `1,234`, is rejected as ambiguous (1234 in some locales, 1.234 in others). Pass `parse` for other formats.
-  - **date**: stored as an ISO string. Only `YYYY-MM-DD` parses; `3/4/2026` is rejected rather than guessed.
-  - **boolean**: `TRUE`/`FALSE`, `yes`/`no`, `1`/`0` and similar; formats as `TRUE` or `FALSE`.
-  - **select**: matches an option label, then a value, then either ignoring case; formats as the label.
-  - **text**: kept exactly as typed.
-- For every type, `parse(format(v))` gives back `v` (property tests).
-- `validateCell` first checks the stored value against the column type, then runs `validate`. A failing value is still stored; the grid flags the cell.
+- Each column names its type by id (`type`) and can set the type's options (`typeOptions`). `parseCell`, `formatCell` and `validateCell` use the column's own `parse` and `format` when it has them, or else its type's. `validateCell` first checks the stored value with the type, then runs the column's `validate`. A failing value is still stored; the grid flags the cell.
+- For every type, `parse(format(v))` gives back `v` (property tests, which a new built-in type cannot skip).
+
+### Column types
+
+The built-in types (`builtInTypes`):
+
+| Type      | Stores                        | Text it reads                                                                                                                                                                                                                          | Shows                                      | Edited by                                          | Options                                                     |
+| --------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------- |
+| `text`    | a string                      | anything, kept exactly as typed                                                                                                                                                                                                        | the text                                   | typing                                             |                                                             |
+| `number`  | a finite number               | `1234.5`, `-12`, `1e21`, `$4.99`, `12%` and `1,234.50`. A comma is never a decimal mark, so `1,5` is rejected, and so is a single comma group such as `1,234` (1234 in some locales, 1.234 in others). Pass `parse` for other formats. | the number, at the end of the cell         | typing                                             |                                                             |
+| `date`    | an ISO string, `"2026-03-01"` | `YYYY-MM-DD` only; `3/4/2026` is rejected rather than guessed, and so is a day that does not exist                                                                                                                                     | the ISO date                               | typing                                             |                                                             |
+| `select`  | an option's value             | an option's label, then its value, then either ignoring case                                                                                                                                                                           | the label                                  | typing, or a list the view draws (`edit: "popup"`) | `options`: `{ value, label }[]`, distinct, labels filled in |
+| `boolean` | `true` or `false`             | `TRUE`/`FALSE`, `yes`/`no`, `1`/`0` and similar                                                                                                                                                                                        | `TRUE` or `FALSE` (the view draws a check) | Space or Enter, no editor (`edit: "toggle"`)       |                                                             |
+
+Every type also orders its values (`compareCells`, with empty cells last): text as words, numbers by value, dates by day, select by the order of its options, `false` before `true`. There is no sort or filter in the grid yet.
+
+**A type of your own** is one object, `defineColumnType`, with no DOM in it:
+
+```ts
+import {
+  builtInTypes,
+  createSheetStore,
+  createTypeRegistry,
+  defineColumnType,
+} from "@sheetcn/core"
+
+const rating = defineColumnType({
+  id: "rating",
+  label: "Rating",
+  defaultOptions: { max: 5 },
+  parse: (text, p) => {
+    const n = Number(text.trim())
+    if (text.trim() === "") return { ok: true, value: null }
+    return Number.isInteger(n) && n >= 1 && n <= p.max
+      ? { ok: true, value: n }
+      : { ok: false, error: `Not 1 to ${p.max}` }
+  },
+  format: (value: number) => "★".repeat(value),
+  validate: (v, p) =>
+    v >= 1 && v <= p.max ? null : { message: `1 to ${p.max}` },
+  align: "end",
+})
+
+const types = createTypeRegistry([...builtInTypes, rating])
+const columns = types.defineColumns<Item>((c) => [
+  c.text("name", { header: "Name" }),
+  c.rating("stars", { header: "Stars", max: 10 }), // `max` is the type's option
+])
+const store = createSheetStore<Item>({ types, columns, rows, getRowId })
+// or, in React: useSheet({ types, columns, getRowId, defaultData: rows })
+```
+
+- A definition has `id`, `label`, `group` (where a type picker lists it), `defaultOptions`, and the functions `parse`, `format`, `validate`, `equals` (default `Object.is`), `compare` (default: the formatted texts as words) and `prepare`. `prepare` runs once per column with the column's options over the defaults; build formatters and lookup maps there, not per cell. Each function gets what `prepare` built, or the options when there is no `prepare`.
+- `edit` says how a cell is edited, and the key map follows it: `"text"` (the default) and `"popup"` open an editor on Enter or typing; `"toggle"` flips a boolean with Space or Enter and ignores typing; `"none"` opens nothing (Delete still clears). `align: "end"` puts values at the end of the cell, as for numbers.
+- The registry is explicit and belongs to one sheet; nothing is registered globally. It throws when two types share an id. A registry's `defineColumns` has one helper per type, named by its id, which checks the key's value type and the type's options. Let TypeScript infer `defineColumnType`'s type parameters (type `format`'s value) so the helper exists. Options a column does not have go to `typeOptions`, which is why a type cannot have an option named like a column property, such as `width`.
+- The store checks that each column's type is the one its `types` define under that id, and drops a change that sets a cell to an equal value by the type's `equals`. Without `types`, a sheet has the built-in types.
+
+**Specs.** A column has a plain-data part, `ColumnSpec` (`id`, `header`, `type`, `typeOptions`, `width`, `minWidth`, `maxWidth`, `grow`, `pin`, `readOnly`), which JSON can carry; the functions (`value`, `write`, `parse`, `format`, `validate`) stay on the column. `toColumnSpec(column)` takes the spec, and `types.fromSpec(spec)` makes a column from it that reads and writes `row[spec.id]`.
 
 ### Changes, the store and history
 
@@ -296,7 +348,7 @@ store.undo()
   - Enter edits the active cell, keeping its value. While editing, Enter commits and moves down, Shift+Enter up, Tab right and Shift+Tab left.
   - Typing a character starts an edit that replaces the value. In that mode the arrow keys commit and move; in an edit started with Enter, F2 or a double click they move the caret. F2 switches between the two.
   - Escape cancels an edit, then a cut that waits for a paste (nothing is cleared), then collapses the selection to the active cell.
-  - Space and Enter toggle a boolean cell; other typed keys do nothing there. Delete and Backspace clear the selection. Ctrl or Cmd + Z undoes; with Shift, or Ctrl or Cmd + Y, it redoes.
+  - What Enter and typing do follows the active cell's type (`activeEdit`): Space and Enter toggle a boolean cell, and other typed keys do nothing there. Delete and Backspace clear the selection. Ctrl or Cmd + Z undoes; with Shift, or Ctrl or Cmd + Y, it redoes.
   - Copy, cut and paste are not keys here: the binding will read them from clipboard events.
 
 </details>
