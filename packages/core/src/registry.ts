@@ -6,21 +6,37 @@ import {
   type KeyColumnOptions,
   type KeysOfType,
 } from "./columns.js"
-import type { AnyColumnTypeDef, TypeOptions, TypeValue } from "./type-def.js"
+import type {
+  AnyColumnTypeDef,
+  TypeOptions,
+  TypeRequired,
+  TypeValue,
+} from "./type-def.js"
 import type { CellValue, Column, ColumnSpec } from "./types.js"
+
+type TypeOptionsArg<O, R extends string> = Partial<Omit<O, R>> &
+  Pick<O, Extract<R, keyof O>>
 
 /**
  * Makes a column of one type. Options the column itself does not have are
- * the type's options (`typeOptions`), such as a select's `options`.
+ * the type's options (`typeOptions`), such as a select's `options`. `R` names
+ * the options the type requires.
  */
-export type TypeHelper<Row, V extends CellValue, O> = {
+export type TypeHelper<
+  Row,
+  V extends CellValue,
+  O,
+  R extends string = never,
+> = {
   (
     key: KeysOfType<Row, V>,
-    options?: KeyColumnOptions<Row, V> & Partial<O>
+    ...args: [R] extends [never]
+      ? [options?: KeyColumnOptions<Row, V> & TypeOptionsArg<O, R>]
+      : [options: KeyColumnOptions<Row, V> & TypeOptionsArg<O, R>]
   ): Column<Row, V>
   (
     id: string,
-    options: AccessorColumnOptions<Row, V> & Partial<O>
+    options: AccessorColumnOptions<Row, V> & TypeOptionsArg<O, R>
   ): Column<Row, V>
 }
 
@@ -32,7 +48,8 @@ export type TypeHelpers<Row, Defs extends readonly AnyColumnTypeDef[]> = {
   [D in Defs[number] as string extends D["id"] ? never : D["id"]]: TypeHelper<
     Row,
     TypeValue<D>,
-    TypeOptions<D>
+    TypeOptions<D>,
+    TypeRequired<D>
   >
 }
 
@@ -104,7 +121,19 @@ function makeHelper(def: AnyColumnTypeDef) {
     const typeOptions: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(input)) {
       if (COLUMN_KEYS.has(k)) own[k] = v
-      else typeOptions[k] = v
+      else if (k in def.defaultOptions) typeOptions[k] = v
+      else {
+        throw new Error(
+          `Column "${keyOrId}" has the option "${k}", which the type "${def.id}" does not have`
+        )
+      }
+    }
+    for (const k of def.requiredOptions ?? []) {
+      if (typeOptions[k] === undefined) {
+        throw new Error(
+          `Column "${keyOrId}" needs the option "${k}" for the type "${def.id}"`
+        )
+      }
     }
     const { value, id, ...rest } = own as Partial<AnyColumn>
     const typed = {

@@ -102,12 +102,14 @@ export const selectType = defineColumnType<
   string,
   SelectOptions,
   PreparedSelect,
-  "select"
+  "select",
+  "options"
 >({
   id: "select",
   label: "Select",
   group: "choice",
   defaultOptions: { options: [] },
+  requiredOptions: ["options"],
   prepare: ({ options }) => {
     const labels = new Map<string, string>()
     const order = new Map<string, number>()

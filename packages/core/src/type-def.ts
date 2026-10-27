@@ -37,6 +37,7 @@ export type ColumnTypeDef<
   O extends object = object,
   P = O,
   Id extends string = string,
+  R extends string = never,
 > = {
   /** Unique within a registry. Columns name their type by it. */
   id: Id
@@ -45,6 +46,11 @@ export type ColumnTypeDef<
   group?: TypeGroup
   /** A value for every option. A column's `typeOptions` override them. */
   defaultOptions: O
+  /**
+   * Options a column must set, because their default means nothing, such as a
+   * select's `options`. Typed helpers require them, and throw without them.
+   */
+  requiredOptions?: readonly R[]
   /**
    * Runs once per column, with the column's options over the defaults. Build
    * anything costly to make per cell here. Throw to reject the options.
@@ -73,7 +79,13 @@ export type ColumnTypeDef<
 }
 
 /** A definition of any value, options and prepared state. */
-export type AnyColumnTypeDef = ColumnTypeDef<CellValue, object, unknown>
+export type AnyColumnTypeDef = ColumnTypeDef<
+  CellValue,
+  object,
+  unknown,
+  string,
+  string
+>
 
 /** The stored value type of a definition. */
 export type TypeValue<D> =
@@ -82,6 +94,12 @@ export type TypeValue<D> =
 /** The options type of a definition. */
 export type TypeOptions<D> =
   D extends ColumnTypeDef<CellValue, infer O, unknown> ? O : never
+
+/** The names of the options a definition requires. */
+export type TypeRequired<D> =
+  D extends ColumnTypeDef<CellValue, object, unknown, string, infer R>
+    ? R
+    : never
 
 /**
  * Defines a column type. It returns the definition unchanged and checks it
@@ -106,6 +124,7 @@ export function defineColumnType<
   O extends object,
   P = O,
   const Id extends string = string,
->(def: ColumnTypeDef<V, O, P, Id>): ColumnTypeDef<V, O, P, Id> {
+  R extends string = never,
+>(def: ColumnTypeDef<V, O, P, Id, R>): ColumnTypeDef<V, O, P, Id, R> {
   return def
 }

@@ -141,11 +141,35 @@ describe("a registry's helpers", () => {
         c.rating("stars", { currency: "EUR" }),
         // @ts-expect-error format receives a number for a rating
         c.rating("stars", { format: (v: string) => v }),
+        // @ts-expect-error a select needs its options
+        c.select("name"),
+        // @ts-expect-error a select needs its options
+        c.select("name", { header: "Name" }),
+        // @ts-expect-error a rating has no optoins option
+        c.rating("stars", { optoins: 3 }),
       ])
     expect(typeof check).toBe("function")
     expectTypeOf<
       TypeHelpers<Row, typeof types.definitions>
     >().not.toHaveProperty("money")
+  })
+
+  it("throw for an unknown option or a missing required option", () => {
+    type Loose = Record<string, (...args: unknown[]) => Column<Row>>
+    const run = (build: (c: Loose) => Column<Row>) =>
+      types.defineColumns<Row>((c) => [build(c as unknown as Loose)])
+    expect(() => run((c) => c.rating("stars", { optoins: 3 }))).toThrow(
+      'Column "stars" has the option "optoins", which the type "rating" does not have'
+    )
+    expect(() => run((c) => c.select("name"))).toThrow(
+      'Column "name" needs the option "options" for the type "select"'
+    )
+    expect(() => run((c) => c.select("name", { header: "Name" }))).toThrow(
+      'Column "name" needs the option "options"'
+    )
+    expect(() =>
+      run((c) => c.select("name", { options: [{ value: "a", label: "A" }] }))
+    ).not.toThrow()
   })
 
   it("make accessor columns read-only unless they write", () => {
