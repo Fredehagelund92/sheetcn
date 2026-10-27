@@ -83,44 +83,50 @@ describe("createViewModel, sort", () => {
   })
 
   it("orders many distinct texts exactly as the collator does", () => {
-    const parts = [
-      "a",
-      "A",
-      "á",
-      "Z",
-      "z",
-      "é",
-      "E",
-      "1",
-      "10",
-      "-",
-      " ",
-      "_",
-      "ö",
-      "aa",
-      "å",
-    ]
-    const many: Item[] = Array.from({ length: 3000 }, (_, i) => ({
-      id: `m${i}`,
-      name:
-        i % 97 === 0
-          ? null
-          : `${parts[(i * 7) % parts.length]}${parts[(i * 13) % parts.length]}${parts[(i * 5) % parts.length]}${i}`,
-      qty: null,
-      due: null,
-      status: null,
-    }))
-    const collator = new Intl.Collator()
-    const expected = many
-      .filter((r) => r.name !== null)
-      .sort((a, b) => collator.compare(a.name as string, b.name as string))
-      .map((r) => r.name)
-    const asc = model({ sort: [{ column: "name", dir: "asc" }] }).compute(many)
-    expect(asc.rows.map((r) => r.name).slice(0, expected.length)).toEqual(
-      expected
+    const part = fc.constantFrom(
+      ...["a", "A", "á", "Z", "z", "é", "E", "1", "10", "-", " ", "_", "ö"],
+      ...["aa", "å", "Ab", "ab", "B2", "b10", "'", ".", "ǆ", "ss", "ß"]
     )
-    expect(asc.rows.slice(expected.length).every((r) => r.name === null)).toBe(
-      true
+    const text = fc.array(part, { minLength: 0, maxLength: 4 })
+    const collator = new Intl.Collator()
+    fc.assert(
+      fc.property(
+        fc.array(text, { minLength: 1100, maxLength: 1400 }),
+        fc.constantFrom<"asc" | "desc">("asc", "desc"),
+        (texts, dir) => {
+          const many: Item[] = texts.map((parts, i) => ({
+            id: `m${i}`,
+            name: i % 53 === 0 ? null : `${parts.join("")}${i % 600}`,
+            qty: null,
+            due: null,
+            status: null,
+          }))
+          const filled = many
+            .map((r) => r.name)
+            .filter((n): n is string => n !== null)
+          const expected = [...new Set(filled)].sort((a, b) =>
+            dir === "asc" ? collator.compare(a, b) : collator.compare(b, a)
+          )
+          const got = model({ sort: [{ column: "name", dir }] }).compute(
+            many
+          ).rows
+          const names = got.map((r) => r.name)
+          expect(names.slice(filled.length)).toEqual(
+            names.slice(filled.length).map(() => null)
+          )
+          const order = names.slice(0, filled.length) as string[]
+          const seen = [...new Set(order)]
+          expect(seen.length).toBe(expected.length)
+          for (let i = 1; i < order.length; i++) {
+            const c = collator.compare(
+              order[i - 1] as string,
+              order[i] as string
+            )
+            expect(dir === "asc" ? c <= 0 : c >= 0).toBe(true)
+          }
+        }
+      ),
+      { numRuns: 15 }
     )
   })
 })
