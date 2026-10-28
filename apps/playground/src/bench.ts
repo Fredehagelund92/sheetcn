@@ -1,4 +1,6 @@
+import type { SheetView } from "@sheetcn/core"
 import type { Sheet } from "@sheetcn/react"
+import { flushSync } from "react-dom"
 
 // Measurement harness, driven from the page (the Measure button) or from the
 // browser console as `window.__playground`.
@@ -202,6 +204,36 @@ export async function measureScroll(
   }
 }
 
+/**
+ * Sets a view at the start of a frame and times it to the frame that shows
+ * it (see `timeToPaint`): the view's filter and sort, React's render and the
+ * paint. Each run starts from the empty view, so each one works the rows out
+ * again. The first run on a rows array also builds what the core keeps with
+ * the rows (folded text, sort ranks); it is reported on its own as `first`.
+ */
+export async function measureView(
+  sheet: Sheet<Record<string, unknown>>,
+  view: SheetView,
+  runs = 10
+): Promise<Stats & { first: number; shown: number }> {
+  const before = sheet.getView()
+  const times: number[] = []
+  let first = 0
+  // The app keeps the view in React state; render it inside the timed work.
+  const set = (v: SheetView) => flushSync(() => sheet.setView(v))
+  for (let i = 0; i <= runs; i++) {
+    set({})
+    await nextPaint()
+    const time = await timeToPaint(() => set(view))
+    if (i === 0) first = round(time)
+    else times.push(time)
+  }
+  const shown = sheet.getRows().length
+  set(before)
+  await nextPaint()
+  return { ...stats(times, 0), first, shown }
+}
+
 export function installBench(sheet: Sheet<Record<string, unknown>>) {
   const api = {
     sheet,
@@ -210,6 +242,8 @@ export function installBench(sheet: Sheet<Record<string, unknown>>) {
       measureCommits(sheet, runs, options),
     measureScroll: (frames?: number, options?: { step?: number }) =>
       measureScroll(frames, options),
+    measureView: (view: SheetView, runs?: number) =>
+      measureView(sheet, view, runs),
     armKeyTimings: () => armKeyTimings(sheet),
     dom: () => {
       const grid = document.querySelector("[role=grid]")

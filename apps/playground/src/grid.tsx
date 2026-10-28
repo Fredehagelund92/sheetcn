@@ -82,10 +82,19 @@ export function SheetGrid({
   label,
   mode = "sheet",
   gridlines = DEFAULT_GRIDLINES[mode],
+  filtered,
+  onKey,
 }: {
   sheet: AnySheet
   label: string
   mode?: GridMode
+  /** Columns a filter names, which get a mark in their header. */
+  filtered?: ReadonlySet<string>
+  /**
+   * Sees each key press before the sheet does, for the app's own keys such
+   * as the filter shortcut. Return true when it handled the key.
+   */
+  onKey?: (e: KeyboardEvent<HTMLDivElement>) => boolean
   /**
    * The lines between cells. The header's bottom line, the row numbers' edge
    * and the pinned columns' edge always show. Set as one attribute on the
@@ -96,8 +105,8 @@ export function SheetGrid({
   const scrollRef = useRef<HTMLDivElement>(null)
   const { table } = sheet
   const rows = sheet.getRows()
-  const startColumns = table.getPinnedLeafColumns("start")
-  const centerColumns = table.getPinnedLeafColumns("center")
+  const startColumns = table.getPinnedVisibleLeafColumns("start")
+  const centerColumns = table.getPinnedVisibleLeafColumns("center")
   const width = sheet.getColumnWidth
   const pinnedWidth = startColumns.reduce(
     (w, c) => w + width(c.id),
@@ -154,6 +163,7 @@ export function SheetGrid({
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (onKey?.(e)) return
     const command = sheet.handleKeyDown(e.nativeEvent, viewport())
     if (command && SCROLLS.has(command.type)) scrollToFocus()
   }
@@ -205,6 +215,7 @@ export function SheetGrid({
                 left={GUTTER_WIDTH + c.getStart("start")}
                 width={width(c.id)}
                 last={i === startColumns.length - 1}
+                filtered={filtered?.has(c.id) ?? false}
               />
             ))}
             <div aria-hidden style={{ width: leftSpacer, flex: "none" }} />
@@ -218,6 +229,7 @@ export function SheetGrid({
                   columnId={c.id}
                   columnIndex={startColumns.length + v.index}
                   width={width(c.id)}
+                  filtered={filtered?.has(c.id) ?? false}
                 />
               )
             })}
@@ -254,6 +266,7 @@ const HeaderCell = memo(function HeaderCell({
   width,
   left,
   last,
+  filtered,
 }: {
   sheet: AnySheet
   columnId: string
@@ -261,6 +274,7 @@ const HeaderCell = memo(function HeaderCell({
   width: number
   left?: number
   last?: boolean
+  filtered: boolean
 }) {
   const selected = useSheetSelection(sheet, (s) =>
     s
@@ -289,7 +303,11 @@ const HeaderCell = memo(function HeaderCell({
       )}
       style={{ width, left }}
     >
-      <HeaderContent columnIndex={columnIndex} title={column?.header ?? ""} />
+      <HeaderContent
+        columnIndex={columnIndex}
+        title={column?.header ?? ""}
+        filtered={filtered}
+      />
       {header?.column.getCanResize() && (
         <div
           aria-hidden
@@ -309,16 +327,27 @@ const HeaderCell = memo(function HeaderCell({
 function HeaderContent({
   columnIndex,
   title,
+  filtered = false,
 }: {
   columnIndex: number
   title: string
+  /** A filter names the column: a mark beside its letter. */
+  filtered?: boolean
 }) {
   return (
     <>
       <span aria-hidden className="letter">
         {columnLetter(columnIndex)}
+        {filtered && (
+          <svg className="filtered" viewBox="0 0 16 16">
+            <path d="M2.5 3.5h11l-4.2 5v4l-2.6 1.2V8.5z" />
+          </svg>
+        )}
       </span>
-      <span className="title">{title}</span>
+      <span className="title">
+        {title}
+        {filtered && <span className="sr-only">(filtered)</span>}
+      </span>
     </>
   )
 }
@@ -334,6 +363,10 @@ type RowProps = {
   sizingKey: string
 }
 
+/**
+ * A row's shell: where it is (its place, its number, its display index for
+ * hit testing). A row that only moved renders this and nothing below it.
+ */
 const SheetRowView = memo(function SheetRowView({
   sheet,
   row,
@@ -342,58 +375,33 @@ const SheetRowView = memo(function SheetRowView({
   virtualColumns,
   leftSpacer,
   totalWidth,
+  sizingKey,
 }: RowProps) {
-  useLayoutEffect(() => {
-    renderCount.rows++
-  })
   // Re-render only when what the selection draws on this row changes.
   const selectionKey = useRowSelectionKey(sheet, rowIndex)
   const editing = useSheetState(sheet, (s) =>
     s.editing?.rowId === row.id ? s.editing : null
   )
-  const { table } = sheet
-  const startColumns = table.getPinnedLeafColumns("start")
-  const centerColumns = table.getPinnedLeafColumns("center")
-  const rects = selectionKey ? sheet.getSelectionRects() : []
-  const active = selectionKey ? sheet.getActiveRange()?.anchor : undefined
-  const activeColumn = active?.rowIndex === rowIndex ? active.columnIndex : -1
-  const rowSelected = rects.some(
-    (r) => r.minRowIndex <= rowIndex && rowIndex <= r.maxRowIndex
-  )
-
-  const cell = (
-    columnId: string,
-    columnIndex: number,
-    width: number,
-    left?: number
-  ) => {
-    const column = sheet.getColumn(columnId)
-    if (!column) return null
-    return (
-      <Cell
-        key={columnId}
-        sheet={sheet}
-        column={column}
-        original={row.original}
-        rowIndex={rowIndex}
-        columnIndex={columnIndex}
-        width={width}
-        left={left}
-        pinnedLast={
-          left !== undefined && columnIndex === startColumns.length - 1
-        }
-        selected={rectsContain(rects, rowIndex, columnIndex)}
-        edges={rects.length ? cellEdges(rects, rowIndex, columnIndex) : null}
-        active={activeColumn === columnIndex}
-        editing={editing?.columnId === columnId ? editing : null}
-      />
-    )
-  }
+  const rects = selectionKey ? sheet.getSelectionRects() : null
+  const anchor = selectionKey ? sheet.getActiveRange()?.anchor : undefined
+  const rowSelected =
+    rects?.some(
+      (r) => r.minRowIndex <= rowIndex && rowIndex <= r.maxRowIndex
+    ) ?? false
+  // The body depends on the display index only through the selection.
+  const selection = rects
+    ? {
+        rowIndex,
+        rects,
+        activeColumn: anchor?.rowIndex === rowIndex ? anchor.columnIndex : -1,
+      }
+    : null
 
   return (
     <div
       role="row"
       aria-rowindex={rowIndex + 2}
+      data-row-position={rowIndex}
       className={cx("grid-row", editing && "editing")}
       style={{ transform: `translateY(${start}px)`, width: totalWidth }}
     >
@@ -406,6 +414,83 @@ const SheetRowView = memo(function SheetRowView({
       >
         {(rowIndex + 1).toLocaleString("en-US")}
       </div>
+      <SheetRowBody
+        sheet={sheet}
+        original={row.original}
+        rowId={row.id}
+        selection={selection}
+        editing={editing}
+        virtualColumns={virtualColumns}
+        leftSpacer={leftSpacer}
+        sizingKey={sizingKey}
+      />
+    </div>
+  )
+})
+
+type RowSelection = {
+  rowIndex: number
+  rects: ReturnType<AnySheet["getSelectionRects"]>
+  activeColumn: number
+}
+
+/** A row's cells, which do not depend on where the row is shown. */
+const SheetRowBody = memo(function SheetRowBody({
+  sheet,
+  original,
+  selection,
+  editing,
+  virtualColumns,
+  leftSpacer,
+}: {
+  sheet: AnySheet
+  original: Record<string, unknown>
+  rowId: string
+  selection: RowSelection | null
+  editing: EditState | null
+  virtualColumns: VirtualItem[]
+  leftSpacer: number
+  sizingKey: string
+}) {
+  useLayoutEffect(() => {
+    renderCount.rows++
+  })
+  const { table } = sheet
+  const startColumns = table.getPinnedVisibleLeafColumns("start")
+  const centerColumns = table.getPinnedVisibleLeafColumns("center")
+
+  const cell = (
+    columnId: string,
+    columnIndex: number,
+    width: number,
+    left?: number
+  ) => {
+    const column = sheet.getColumn(columnId)
+    if (!column) return null
+    const rects = selection?.rects ?? []
+    const rowIndex = selection?.rowIndex ?? -1
+    return (
+      <Cell
+        key={columnId}
+        sheet={sheet}
+        column={column}
+        original={original}
+        columnIndex={columnIndex}
+        width={width}
+        left={left}
+        pinnedLast={
+          left !== undefined && columnIndex === startColumns.length - 1
+        }
+        selected={rectsContain(rects, rowIndex, columnIndex)}
+        edges={rects.length ? cellEdges(rects, rowIndex, columnIndex) : null}
+        active={selection?.activeColumn === columnIndex}
+        editing={editing?.columnId === columnId ? editing : null}
+      />
+    )
+  }
+
+  return (
+    <>
       {startColumns.map((c, i) =>
         cell(
           c.id,
@@ -425,7 +510,7 @@ const SheetRowView = memo(function SheetRowView({
             )
           : null
       })}
-    </div>
+    </>
   )
 })
 
@@ -433,7 +518,6 @@ function Cell({
   sheet,
   column,
   original,
-  rowIndex,
   columnIndex,
   width,
   left,
@@ -446,7 +530,6 @@ function Cell({
   sheet: AnySheet
   column: Column<Record<string, unknown>>
   original: Record<string, unknown>
-  rowIndex: number
   columnIndex: number
   width: number
   left: number | undefined
@@ -477,7 +560,6 @@ function Cell({
       aria-readonly={readOnly || undefined}
       aria-invalid={issue ? true : undefined}
       title={issue?.message}
-      data-row-index={rowIndex}
       data-column-index={columnIndex}
       tabIndex={active && !editing ? 0 : -1}
       ref={active && !editing ? focusIfGridHasFocus : undefined}

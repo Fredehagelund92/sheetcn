@@ -10,7 +10,9 @@ const CATEGORY = 2
 
 const grid = (page: Page) => page.getByRole("grid", { name: "Items" })
 const cell = (page: Page, row: number, column: number) =>
-  grid(page).locator(`[data-row-index="${row}"][data-column-index="${column}"]`)
+  grid(page).locator(
+    `[data-row-position="${row}"] [data-column-index="${column}"]`
+  )
 
 /** Where a cell's text sits: gaps between the text and the cell's sides. */
 async function gaps(page: Page, row: number, column: number) {

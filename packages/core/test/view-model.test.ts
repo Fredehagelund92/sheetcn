@@ -297,7 +297,7 @@ describe("createViewModel, one-row updates", () => {
         }))
         const store = createSheetStore<Item>({ rows: start, columns, getRowId })
         const live = model(view)
-        live.compute(store.getRows())
+        let last = live.compute(store.getRows())
         for (const batch of batches) {
           store.transaction("edit", (tx) => {
             for (const [row, { column, value }] of batch)
@@ -307,6 +307,17 @@ describe("createViewModel, one-row updates", () => {
           const got = live.compute(now)
           const want = model(view).compute(now)
           expect(ids(got)).toEqual(ids(want))
+          // The change turns the last rows into these.
+          if (got !== last && got.change) {
+            expect(got.change.from).toBe(last)
+            const moved = last.rows.slice()
+            for (const p of got.change.removed) moved.splice(p, 1)
+            for (const { at, source } of got.change.inserted) {
+              moved.splice(at, 0, now[source] as Item)
+            }
+            expect(moved).toEqual(got.rows)
+          }
+          last = got
           expect(got.groups).toEqual(want.groups)
           for (let p = 0; p < got.rows.length; p++) {
             expect(got.sourceIndex(p)).toBe(want.sourceIndex(p))
@@ -315,6 +326,18 @@ describe("createViewModel, one-row updates", () => {
       }),
       { numRuns: 200 }
     )
+  })
+
+  it("updates the same way for an array the store did not make", () => {
+    const view: SheetView = { sort: [{ column: "qty", dir: "asc" }] }
+    const live = model(view)
+    live.compute(rows)
+    const edited = rows.slice()
+    edited[2] = { ...(rows[2] as Item), qty: 0 }
+    const got = live.compute(edited)
+    expect(ids(got)).toEqual(ids(model(view).compute(edited)))
+    expect(got.change?.removed).toHaveLength(1)
+    expect(got.change?.inserted).toHaveLength(1)
   })
 
   it("follows inserts and removes by working them out afresh", () => {

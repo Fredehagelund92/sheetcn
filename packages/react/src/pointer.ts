@@ -16,9 +16,10 @@ export type HitTest = (clientX: number, clientY: number) => PointerTarget | null
 
 /**
  * Reads a target from data attributes on the element or its nearest
- * ancestor: a cell has `data-row-index` and `data-column-index`, a row header
- * only `data-row-index`, a column header only `data-column-index`, and the
- * corner `data-sheet-corner`.
+ * ancestor: a row header has `data-row-index`, a column header only
+ * `data-column-index`, and the corner `data-sheet-corner`. A cell has
+ * `data-column-index` and takes its row from the `data-row-position` of its
+ * row, so a row that only moved needs no new cells.
  */
 export function targetOfElement(element: Element | null): PointerTarget | null {
   const el = element?.closest(
@@ -26,8 +27,13 @@ export function targetOfElement(element: Element | null): PointerTarget | null {
   )
   if (!(el instanceof HTMLElement)) return null
   const { rowIndex, columnIndex } = el.dataset
-  const r = rowIndex === undefined ? undefined : Number(rowIndex)
   const c = columnIndex === undefined ? undefined : Number(columnIndex)
+  const position =
+    rowIndex ??
+    (c === undefined
+      ? undefined
+      : el.closest<HTMLElement>("[data-row-position]")?.dataset.rowPosition)
+  const r = position === undefined ? undefined : Number(position)
   if (r !== undefined && c !== undefined) {
     return { type: "cell", rowIndex: r, columnIndex: c }
   }
@@ -88,7 +94,7 @@ export function focusActiveCell<Row extends RowData>(
   const active = sheet.getActiveRange()?.anchor
   const cell = active
     ? container.querySelector<HTMLElement>(
-        `[data-row-index="${active.rowIndex}"][data-column-index="${active.columnIndex}"]`
+        `[data-row-position="${active.rowIndex}"] [data-column-index="${active.columnIndex}"]`
       )
     : null
   const element = cell ?? container

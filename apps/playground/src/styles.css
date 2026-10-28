@@ -18,6 +18,8 @@
   --header-selected: color-mix(in oklab, var(--accent) 14%, var(--header));
   --tint: color-mix(in oklab, var(--accent) 8%, var(--background));
   --chip: oklch(0.95 0 0);
+  --popover: oklch(1 0 0);
+  --shadow: 0 6px 24px -6px oklch(0 0 0 / 0.18), 0 1px 3px oklch(0 0 0 / 0.08);
   color-scheme: light dark;
 }
 
@@ -32,6 +34,8 @@
     --destructive: oklch(0.704 0.191 22.216);
     --accent: oklch(0.707 0.165 254.6);
     --chip: oklch(0.28 0 0);
+    --popover: oklch(0.205 0 0);
+    --shadow: 0 8px 28px -6px oklch(0 0 0 / 0.6), 0 1px 3px oklch(0 0 0 / 0.4);
   }
 }
 
@@ -541,4 +545,441 @@ button:focus-visible {
   color: oklch(0.985 0 0);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* Icons ------------------------------------------------------------------- */
+
+.i {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -2px;
+}
+
+button .i + * {
+  margin-left: 6px;
+}
+
+.toolbar button:has(.i) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.head-cell .letter {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.head-cell .filtered {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  fill: var(--accent);
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+/* Saved views ------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.tabs button {
+  height: 26px;
+  padding-block: 0;
+  font-size: 12.5px;
+}
+
+.tabs .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  font-size: 12.5px;
+}
+
+.tabs .tab[aria-pressed="true"] {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.tabs .tab .n {
+  min-width: 2ch;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs .mod {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.tabs .sp,
+.filter-bar .sp {
+  flex: 1;
+}
+
+.tabs .pri {
+  background: var(--foreground);
+  border-color: var(--foreground);
+  color: var(--background);
+  font-weight: 500;
+}
+
+/* The filter bar ---------------------------------------------------------- */
+
+.filter-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.filter-bar .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.filter-bar .btn.ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+}
+
+.filter-bar .btn.icon {
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+.filter-bar .mode,
+.filter-bar .count {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-bar .count b {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.fchip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 26px;
+  max-width: 100%;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.fchip > * {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 7px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.fchip > :last-child {
+  border-right: 0;
+}
+
+.fchip > button:hover:not(:disabled) {
+  background: var(--muted);
+}
+
+.fchip > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fchip .f {
+  font-weight: 500;
+}
+
+.fchip .o {
+  color: var(--muted-foreground);
+}
+
+.fchip .v {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.fchip .x {
+  width: 24px;
+  padding: 0;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.fchip .open {
+  background: var(--muted);
+}
+
+.fchip.draft {
+  border-style: dashed;
+}
+
+.fchip.draft .v {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+
+.fchip.bad {
+  border-color: color-mix(in oklab, var(--destructive) 55%, var(--border));
+}
+
+.fchip.bad .v,
+.fchip.bad .o {
+  color: var(--destructive);
+}
+
+.filter-bar .toast {
+  position: absolute;
+  right: 12px;
+  top: calc(100% + 8px);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--popover);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+
+.filter-bar .toast button {
+  font-weight: 600;
+}
+
+/* Popovers ---------------------------------------------------------------- */
+
+.pop {
+  position: absolute;
+  top: calc(100% - 2px);
+  z-index: 30;
+  width: 260px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--popover);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.pop .hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.pop .hdr b {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.pop .srch {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.pop .srch input {
+  flex: 1;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.pop .list {
+  max-height: 280px;
+  padding: 4px 0;
+  overflow-y: auto;
+  outline: none;
+}
+
+.pop .opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.pop .opt.on {
+  background: var(--muted);
+}
+
+.pop .list:focus-visible .opt.on {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.pop .opt.dim {
+  height: auto;
+  padding: 8px;
+  color: var(--muted-foreground);
+  white-space: normal;
+}
+
+.pop .opt .sm {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pop .body {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.pop .step.value .body:has(.list) {
+  padding: 0;
+}
+
+.pop .two {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+}
+
+.pop .inp {
+  width: 100%;
+  height: 30px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.pop .two .inp {
+  flex: 1;
+}
+
+.pop .inp.num {
+  flex: 0 0 64px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pop .inp:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+.pop .ft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+}
+
+.pop .ft .rt {
+  margin-left: auto;
+}
+
+.pop kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font: 11px/16px inherit;
+  white-space: nowrap;
+}
+
+.pop .cb {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 1px solid var(--sheet-grid-line);
+  border-radius: 4px;
+}
+
+.pop .cb.on {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.pop .cb.on::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  transform: translateY(-1px) rotate(-45deg);
 }

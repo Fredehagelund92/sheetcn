@@ -7,6 +7,7 @@ import {
   type CompileFilterOptions,
   type RowTest,
 } from "./filter.js"
+import { patchedRows } from "./patch-record.js"
 import { ranksFor, sortByRanks, type RankSource } from "./rank-cache.js"
 import { indexFor } from "./row-index.js"
 import type { CellValue, Column } from "./types.js"
@@ -37,6 +38,19 @@ export type ViewGroup = {
   size: number
 }
 
+/**
+ * How a result came from the last one, when a few rows were replaced: apply
+ * `removed` (positions in the last result's `rows`, from the last to the
+ * first), then `inserted` in order (each row is the source row at `source`,
+ * put at `at` among the rows as they stand then) to the last result's
+ * `rows`, to get this result's.
+ */
+export type ViewChange<Row> = {
+  readonly from: ViewResult<Row>
+  readonly removed: readonly number[]
+  readonly inserted: readonly { at: number; source: number }[]
+}
+
 /** The rows a view shows, worked out for one array of rows. */
 export type ViewResult<Row> = {
   /**
@@ -47,6 +61,8 @@ export type ViewResult<Row> = {
   readonly rows: readonly Row[]
   /** The groups over `rows`, in order, or null when the view does not group. */
   readonly groups: readonly ViewGroup[] | null
+  /** Set when the last result's rows were patched into these. */
+  readonly change?: ViewChange<Row>
   /** The source position of the row shown at `position`. */
   sourceIndex(position: number): number
   /** Where the row is shown, or -1 when the filter hides it or it is unknown. */
@@ -81,6 +97,13 @@ function compareBy<Row>(order: Order<Row>, a: unknown, b: unknown): number {
   if (b === null) return -1
   const c = order.compare(a, b)
   return c > 0 ? order.dir : c < 0 ? -order.dir : 0
+}
+
+/** Puts `item` at `to` and shifts what lies between `from` and `to` by one. */
+function move<T>(items: T[], from: number, to: number, item: T): void {
+  if (from < to) items.copyWithin(from, from + 1, to + 1)
+  else if (to < from) items.copyWithin(to + 1, to, from)
+  items[to] = item
 }
 
 function readerFor<Row>(column: Column<Row>): (row: Row) => CellValue {
@@ -335,16 +358,34 @@ class Model<Row> implements ViewModel<Row> {
   #patch(state: State<Row>, rows: readonly Row[]): State<Row> | null {
     const before = state.source
     if (before.length !== rows.length) return null
-    const changed: number[] = []
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i] !== before[i]) {
-        if (changed.length === PATCH_LIMIT) return null
-        changed.push(i)
+    // `applyChange` says which rows it replaced; any other array is compared.
+    let changed: readonly number[]
+    const patched = patchedRows(rows, before)
+    if (patched) {
+      if (patched.length > PATCH_LIMIT) return null
+      changed = patched.toSorted((a, b) => a - b)
+    } else {
+      const found: number[] = []
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i] !== before[i]) {
+          if (found.length === PATCH_LIMIT) return null
+          found.push(i)
+        }
       }
+      changed = found
     }
     if (!changed.length) {
-      return this.#snapshot(rows, state.shown, state.order, state.groups)
+      return this.#snapshot(rows, state.shown, state.order, state.groups, {
+        from: state.result,
+        removed: [],
+        inserted: [],
+      })
     }
+    const one =
+      changed.length === 1
+        ? this.#moveOne(state, rows, changed[0] as number)
+        : null
+    if (one) return one
     const shown = state.shown.slice()
     const order = state.order.slice()
     const groups = state.groups?.map((group) => ({ ...group })) ?? null
@@ -362,15 +403,52 @@ class Model<Row> implements ViewModel<Row> {
       order.splice(p, 1)
     }
     const test: RowTest<Row> = this.#filter.bind(rows)
+    const inserted: { at: number; source: number }[] = []
     for (const i of changed) {
       const row = rows[i] as Row
       if (!test(row, i)) continue
       const p = this.#insertAt(shown, order, row, i)
       shown.splice(p, 0, row)
       order.splice(p, 0, i)
+      inserted.push({ at: p, source: i })
       if (groups) this.#joinGroup(groups, row, p)
     }
-    return this.#snapshot(rows, shown, order, groups)
+    return this.#snapshot(rows, shown, order, groups, {
+      from: state.result,
+      removed: out,
+      inserted,
+    })
+  }
+
+  /**
+   * The state after one shown row was replaced by one that is still shown:
+   * the row moves to where it now belongs with one copy of each array, not
+   * a copy and two splices. Null when the row was hidden or the new one is.
+   */
+  #moveOne(
+    state: State<Row>,
+    rows: readonly Row[],
+    i: number
+  ): State<Row> | null {
+    const row = rows[i] as Row
+    const p = this.#find(state.shown, state.order, state.source[i] as Row, i)
+    if (p < 0 || !this.#filter.bind(rows)(row, i)) return null
+    const q = this.#insertAt(state.shown, state.order, row, i, p)
+    const shown = state.shown.slice()
+    const order = state.order.slice()
+    move(shown, p, q, row)
+    move(order, p, q, i)
+    let groups: ViewGroup[] | null = null
+    if (state.groups) {
+      groups = state.groups.map((group) => ({ ...group }))
+      this.#leaveGroup(groups, p)
+      this.#joinGroup(groups, row, q)
+    }
+    return this.#snapshot(rows, shown, order, groups, {
+      from: state.result,
+      removed: [p],
+      inserted: [{ at: q, source: i }],
+    })
   }
 
   /** The position of the row shown from source position `i`, or -1. */
@@ -387,18 +465,23 @@ class Model<Row> implements ViewModel<Row> {
     return -1
   }
 
-  /** Where a row from source position `i` goes among the shown rows. */
+  /**
+   * Where a row from source position `i` goes among the shown rows, as they
+   * stand without the one at `skip`, when there is one.
+   */
   #insertAt(
     shown: readonly Row[],
     order: readonly number[],
     row: Row,
-    i: number
+    i: number,
+    skip = -1
   ): number {
     let lo = 0
-    let hi = shown.length
+    let hi = shown.length - (skip < 0 ? 0 : 1)
     while (lo < hi) {
       const mid = (lo + hi) >> 1
-      if (this.#compare(shown[mid] as Row, order[mid] as number, row, i) < 0) {
+      const at = skip >= 0 && mid >= skip ? mid + 1 : mid
+      if (this.#compare(shown[at] as Row, order[at] as number, row, i) < 0) {
         lo = mid + 1
       } else {
         hi = mid
@@ -456,13 +539,15 @@ class Model<Row> implements ViewModel<Row> {
     source: readonly Row[],
     shown: Row[],
     order: number[],
-    groups: ViewGroup[] | null
+    groups: ViewGroup[] | null,
+    change?: ViewChange<Row>
   ): State<Row> {
     const getRowId = this.#getRowId
     let positions: Int32Array | null = null
     const result: ViewResult<Row> = {
       rows: shown,
       groups,
+      ...(change ? { change } : {}),
       sourceIndex: (position) => order[position] ?? -1,
       indexOf: (rowId) => {
         const i = indexFor(source).indexOf(source, getRowId, rowId)

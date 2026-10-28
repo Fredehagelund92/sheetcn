@@ -75,7 +75,7 @@ describe("rangeForTargets", () => {
 describe("targetOfElement", () => {
   it("reads targets from data attributes", () => {
     document.body.innerHTML = `
-      <div data-row-index="4" data-column-index="2"><span id="in-cell"></span></div>
+      <div data-row-position="4"><div data-column-index="2"><span id="in-cell"></span></div></div>
       <div data-row-index="7" id="row-header"></div>
       <div data-column-index="1" id="column-header"></div>
       <div data-sheet-corner id="corner"></div>
@@ -229,10 +229,12 @@ describe("useSheetPointer", () => {
     const p = setup()
     const header = document.createElement("div")
     const cellElement = document.createElement("div")
-    cellElement.dataset.rowIndex = "5"
     cellElement.dataset.columnIndex = "2"
     cellElement.tabIndex = -1
-    p.scroller.append(header, cellElement)
+    const rowElement = document.createElement("div")
+    rowElement.dataset.rowPosition = "5"
+    rowElement.append(cellElement)
+    p.scroller.append(header, rowElement)
     p.down(25, 55)
     const prevented = p.mouseDown(header)
     expect(prevented).toHaveBeenCalled()

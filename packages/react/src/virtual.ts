@@ -105,15 +105,15 @@ export function useSheetColumnVirtualizer<Row extends RowData>(
 ) {
   const { overscan = 2, gutterWidth = 0, getScrollElement } = options
   const { table } = sheet
-  const start = table.getPinnedLeafColumns("start")
-  const center = table.getPinnedLeafColumns("center")
+  const start = table.getPinnedVisibleLeafColumns("start")
+  const center = table.getPinnedVisibleLeafColumns("center")
   const width = (id: string) => sheet.getColumnWidth(id)
   const pinnedWidth = start.reduce((w, c) => w + width(c.id), gutterWidth)
   const sizes = center.map((c) => width(c.id)).join(",")
   const rangeExtractor = useCallback(
     (range: Range) => {
       const active = sheet.getActiveRange()?.anchor.columnIndex
-      const pinned = sheet.table.getPinnedLeafColumns("start").length
+      const pinned = sheet.table.getPinnedVisibleLeafColumns("start").length
       return keepMounted(range, active === undefined ? active : active - pinned)
     },
     [sheet]

@@ -1,15 +1,23 @@
 import {
+  focusActiveCell,
   useSheet,
   useSheetHistory,
   useSheetSelection,
   useSheetState,
   type Sheet,
 } from "@sheetcn/react"
-import type { ColumnSizing } from "@sheetcn/core"
-import { useEffect, useState } from "react"
+import type { ColumnSizing, SheetView } from "@sheetcn/core"
+import { useEffect, useMemo, useState } from "react"
 
 import { installBench, measureCommits, type Stats } from "./bench"
 import { columns, getRowId, makeItems, types } from "./data"
+import {
+  FilterBar,
+  Icon,
+  NEW_FILTER,
+  filteredColumns,
+  type FilterFlow,
+} from "./filter-bar"
 import {
   DEFAULT_GRIDLINES,
   SheetGrid,
@@ -17,6 +25,7 @@ import {
   type GridMode,
   type Gridlines,
 } from "./grid"
+import { SAVED_VIEWS, ViewTabs, type SavedView } from "./views"
 
 const params = new URLSearchParams(location.search)
 const ROWS = Math.max(0, Number(params.get("rows") ?? 100_000) || 0)
@@ -38,7 +47,17 @@ const startGridlines =
     (g) => g === params.get("gridlines")
   ) ?? DEFAULT_GRIDLINES[MODE]
 
+// The demo dates are invented and fall in 2026, so relative dates ("in the
+// last 30 days") read today as 2026-10-27; ?today=YYYY-MM-DD sets another.
+const TODAY = params.get("today") ?? "2026-10-27"
+
 type AnySheet = Sheet<Record<string, unknown>>
+
+/** Puts the focus back on the grid's active cell. */
+function focusGrid(sheet: AnySheet) {
+  const grid = document.querySelector<HTMLElement>("[role=grid]")
+  if (grid) focusActiveCell(sheet, grid)
+}
 
 export function App() {
   const [sizing, setSizing] = useState(SIZING)
@@ -46,12 +65,20 @@ export function App() {
   // the window.
   const [frame, setFrame] = useState(100)
   const [gridlines, setGridlines] = useState(startGridlines)
+  // The app owns the view and its saved views; the sheet shows the view.
+  const [saved, setSaved] = useState<SavedView[]>(SAVED_VIEWS)
+  const [picked, setPicked] = useState(0)
+  const [view, setView] = useState<SheetView>(() => saved[0]?.view ?? {})
+  const [flow, setFlow] = useState<FilterFlow | null>(null)
   const typed = useSheet({
     types,
     columns: shownColumns,
     getRowId,
     defaultData: data,
     sizing,
+    view,
+    onViewChange: setView,
+    today: TODAY,
   })
   // The views read cells through the columns, so they need no row type.
   const sheet = typed as unknown as AnySheet
@@ -59,6 +86,26 @@ export function App() {
   const [measuring, setMeasuring] = useState(false)
 
   useEffect(() => installBench(sheet), [sheet])
+
+  // Ctrl or Cmd and Shift and F opens the filter from anywhere.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        e.preventDefault()
+        sheet.cancelEdit()
+        setFlow(NEW_FILTER)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    return () =>
+      window.removeEventListener("keydown", onKeyDown, { capture: true })
+  }, [sheet])
+
+  const filtered = useMemo(() => filteredColumns(view), [view])
 
   const measure = async () => {
     setMeasuring(true)
@@ -74,8 +121,27 @@ export function App() {
           {ROWS.toLocaleString("en-US")} rows by {shownColumns.length} columns
         </span>
       </header>
+      <ViewTabs
+        sheet={sheet}
+        saved={saved}
+        current={picked}
+        onPick={(i) => {
+          setPicked(i)
+          setFlow(null)
+          setView(saved[i]?.view ?? {})
+        }}
+        onSave={(i, next) =>
+          setSaved((list) =>
+            list.map((s, j) => (j === i ? { ...s, view: next } : s))
+          )
+        }
+      />
       <Toolbar
         sheet={sheet}
+        onFilter={
+          // The filter bar has its own button once it shows.
+          filtered.size || flow ? null : () => setFlow(NEW_FILTER)
+        }
         onMeasure={() => void measure()}
         measuring={measuring}
         gridlines={gridlines}
@@ -88,6 +154,12 @@ export function App() {
         frame={frame}
         onFrame={setFrame}
       />
+      <FilterBar
+        sheet={sheet}
+        flow={flow}
+        onFlow={setFlow}
+        onGrid={() => focusGrid(sheet)}
+      />
       <main className="grid-host">
         <div
           className={frame < 100 ? "grid-frame framed" : "grid-frame"}
@@ -98,6 +170,23 @@ export function App() {
             label="Items"
             mode={MODE}
             gridlines={gridlines}
+            filtered={filtered}
+            onKey={(e) => {
+              // In table mode F opens the filter; in a sheet it types.
+              if (
+                MODE === "table" &&
+                e.key.toLowerCase() === "f" &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.altKey &&
+                !sheet.getState().editing
+              ) {
+                e.preventDefault()
+                setFlow(NEW_FILTER)
+                return true
+              }
+              return false
+            }}
           />
         </div>
       </main>
@@ -108,12 +197,14 @@ export function App() {
 
 function Toolbar({
   sheet,
+  onFilter,
   onMeasure,
   measuring,
   gridlines,
   onGridlines,
 }: {
   sheet: AnySheet
+  onFilter: (() => void) | null
   onMeasure: () => void
   measuring: boolean
   gridlines: Gridlines
@@ -136,6 +227,17 @@ function Toolbar({
       <output aria-label="Selected range" className="address">
         {address || "-"}
       </output>
+      {onFilter && (
+        <button
+          type="button"
+          title="Filter (Ctrl or Cmd, Shift and F)"
+          aria-keyshortcuts="Control+Shift+F Meta+Shift+F"
+          onClick={onFilter}
+        >
+          <Icon name="filter" />
+          Filter
+        </button>
+      )}
       <button type="button" disabled={!history.canUndo} onClick={sheet.undo}>
         Undo
       </button>

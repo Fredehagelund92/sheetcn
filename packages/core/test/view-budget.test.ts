@@ -1,7 +1,6 @@
 // Gates for filter, sort and group on 100,000 rows, in the core: applying a
-// filter takes under 10 ms, a sort under 100 ms, and a one-cell commit with a
-// filter, a sort and a group on, the view updated after it, under 1 ms
-// (median). The folded text that text filters match, and the ranks a sort
+// filter takes under 10 ms and a sort under 100 ms. A one-cell commit with a
+// view on is gated in view-commit.perf.test.ts. The folded text that text filters match, and the ranks a sort
 // reads, are built on first use and kept with the rows, as the value index
 // is; the first fold is timed on its own, and sorts are timed both ways.
 //
@@ -12,18 +11,8 @@
 // one sort through the collator, is gated in text-sort.perf.test.ts.
 import { describe, expect, it } from "vitest"
 
-import { createSheetStore, type SheetView } from "../src/index.js"
-import {
-  columns,
-  getRowId,
-  makeRows,
-  model,
-  random,
-  ROWS,
-  show,
-  time,
-  type Row,
-} from "./budget-data.js"
+import type { SheetView } from "../src/index.js"
+import { makeRows, model, ROWS, show, time } from "./budget-data.js"
 
 const threeFilters: SheetView = {
   filter: {
@@ -103,23 +92,4 @@ describe(`filter, sort and group on ${ROWS.toLocaleString("en")} rows`, () => {
       expect(warm.fastest).toBeLessThan(100)
     }
   }, 60_000)
-
-  it("commits one cell with a filter, a sort and a group on in under 1 ms", () => {
-    const store = createSheetStore<Row>({ rows, columns, getRowId })
-    const view = model({
-      ...threeFilters,
-      sort: [{ column: "score", dir: "asc" }],
-      group: { column: "status" },
-    })
-    view.compute(store.getRows())
-    const t = time(300, (i) => {
-      const id = `r${Math.floor(random() * ROWS)}`
-      store.transaction("edit", (tx) =>
-        tx.set(id, i % 2 ? "score" : "status", i % 2 ? random() : "review")
-      )
-      view.compute(store.getRows())
-    })
-    console.log(`commit and view update: median ${t.median.toFixed(3)} ms`)
-    expect(t.fastest).toBeLessThan(1)
-  })
 })

@@ -1,3 +1,4 @@
+import { patchedRows } from "@sheetcn/core"
 import {
   constructRow,
   makeObjectMap,
@@ -85,8 +86,9 @@ function buildModel<TFeatures extends TableFeatures, TData extends RowData>(
 
 /**
  * The previous model with new `Row`s for the changed objects, or null when
- * rows were added, removed or moved. O(rows) reference checks plus O(changed
- * rows) work.
+ * rows were added, removed or moved. O(changed rows) work when the store
+ * made `data` from `previousData` (see `patchedRows`), else also O(rows)
+ * reference checks.
  */
 function patchModel<TFeatures extends TableFeatures, TData extends RowData>(
   table: Table<TFeatures, TData>,
@@ -97,9 +99,15 @@ function patchModel<TFeatures extends TableFeatures, TData extends RowData>(
   if (data.length !== previousData.length || table.options.getSubRows) {
     return null
   }
-  const changed: number[] = []
-  for (let i = 0; i < data.length; i++) {
-    if (data[i] !== previousData[i]) changed.push(i)
+  // The sheet store says which rows a change replaced; other arrays are
+  // compared.
+  let changed = patchedRows(data, previousData)
+  if (!changed) {
+    const found: number[] = []
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] !== previousData[i]) found.push(i)
+    }
+    changed = found
   }
   if (!changed.length) return previous
   const ids = changed.map((i) => table.getRowId(data[i] as TData, i))
