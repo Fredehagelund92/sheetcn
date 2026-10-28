@@ -7,8 +7,10 @@ import type { SheetView } from "@sheetcn/core"
 // on a plain grid, and under 10 ms with a filter and a sort on (inside one 60
 // fps frame of 16.7 ms: after the commit the view tests and moves the changed
 // row, which adds about 1 ms, and the paint path then measures 2 to 8 ms on a
-// shared machine). Each gate is the median of three rounds, so one busy moment
-// on the machine moves one round, not the gate.
+// shared machine). Each gate is the median of five rounds after a discarded
+// warm-up round, so one busy moment on the machine moves one round, not the
+// gate. The paint gates are defined for a quiet machine: they run in the
+// performance job on main and nightly, not on every pull request.
 
 // Each gate runs in a browser of its own, so the garbage one gate leaves
 // (views over 100,000 rows built and dropped) is not collected while the
@@ -31,7 +33,7 @@ type Stats = {
 }
 type ViewStats = Stats & { first: number; shown: number }
 
-const ROUNDS = 3
+const ROUNDS = 5
 
 const median = (values: number[]) =>
   [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] as number
@@ -41,6 +43,7 @@ async function rounds<T extends Stats>(
   round: () => Promise<T>
 ): Promise<{ median: number; rounds: T[] }> {
   const all: T[] = []
+  await round() // warm-up, discarded
   for (let r = 0; r < ROUNDS; r++) all.push(await round())
   for (const s of all) console.log(`${name}: ${JSON.stringify(s)}`)
   return { median: median(all.map((s) => s.median)), rounds: all }
