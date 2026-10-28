@@ -9,7 +9,7 @@ const VALUES = ["None", "Rows", "Columns", "Both"] as const
 
 const grid = (page: Page) => page.getByRole("grid", { name: "Items" })
 const cell = (page: Page, row: number, column: number) =>
-  page.locator(`.cell[data-row-index="${row}"][data-column-index="${column}"]`)
+  page.locator(`[data-row-position="${row}"] .cell[data-column-index="${column}"]`)
 
 /** The lines a cell draws: true where its border has any colour. */
 async function lines(locator: Locator) {
@@ -132,7 +132,7 @@ test("gridlines move no column, in fill, while selecting and editing", async ({
   const geometry = () =>
     grid(page).evaluate((el) => ({
       scrollWidth: el.scrollWidth,
-      cells: [...el.querySelectorAll('.cell[data-row-index="2"]')].map((c) => {
+      cells: [...el.querySelectorAll('[data-row-position="2"] .cell')].map((c) => {
         const box = c.getBoundingClientRect()
         return [box.left, box.width]
       }),

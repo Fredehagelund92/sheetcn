@@ -19,7 +19,13 @@ const test = base.extend<{ page: Page }>({
   },
 })
 
-type Stats = { median: number; p95: number; max: number; runs: number }
+type Stats = {
+  median: number
+  p95: number
+  max: number
+  runs: number
+  rowRendersPerCommit: number
+}
 type ViewStats = Stats & { first: number; shown: number }
 
 const ROUNDS = 3
@@ -123,4 +129,7 @@ test("a one-cell commit with a filter and a sort on paints in under 5 ms", async
     )
   )
   expect(commits.median).toBeLessThan(5)
+  // A moved row repaints its shell only: the changed row (and the row that
+  // scrolls into view) render their cells.
+  expect(Math.max(...commits.rounds.map((r) => r.rowRendersPerCommit))).toBeLessThanOrEqual(3)
 })
