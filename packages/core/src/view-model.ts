@@ -381,7 +381,10 @@ class Model<Row> implements ViewModel<Row> {
         inserted: [],
       })
     }
-    const one = changed.length === 1 ? this.#moveOne(state, rows, changed[0] as number) : null
+    const one =
+      changed.length === 1
+        ? this.#moveOne(state, rows, changed[0] as number)
+        : null
     if (one) return one
     const shown = state.shown.slice()
     const order = state.order.slice()
@@ -422,7 +425,11 @@ class Model<Row> implements ViewModel<Row> {
    * the row moves to where it now belongs with one copy of each array, not
    * a copy and two splices. Null when the row was hidden or the new one is.
    */
-  #moveOne(state: State<Row>, rows: readonly Row[], i: number): State<Row> | null {
+  #moveOne(
+    state: State<Row>,
+    rows: readonly Row[],
+    i: number
+  ): State<Row> | null {
     const row = rows[i] as Row
     const p = this.#find(state.shown, state.order, state.source[i] as Row, i)
     if (p < 0 || !this.#filter.bind(rows)(row, i)) return null

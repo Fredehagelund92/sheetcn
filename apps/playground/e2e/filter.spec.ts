@@ -8,7 +8,9 @@ const STATUS = 3
 const grid = (page: Page) => page.getByRole("grid", { name: "Items" })
 const bar = (page: Page) => page.getByRole("toolbar", { name: "Filters" })
 const cell = (page: Page, row: number, column: number) =>
-  grid(page).locator(`[data-row-position="${row}"] [data-column-index="${column}"]`)
+  grid(page).locator(
+    `[data-row-position="${row}"] [data-column-index="${column}"]`
+  )
 const count = (page: Page) => bar(page).locator(".count")
 
 /** The texts of a column's first rows. */

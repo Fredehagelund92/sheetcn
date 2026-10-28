@@ -26,7 +26,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   type KeyboardEvent,
   type ReactElement,
@@ -390,18 +389,13 @@ const SheetRowView = memo(function SheetRowView({
       (r) => r.minRowIndex <= rowIndex && rowIndex <= r.maxRowIndex
     ) ?? false
   // The body depends on the display index only through the selection.
-  const selection = useMemo(
-    () =>
-      rects
-        ? {
-            rowIndex,
-            rects,
-            activeColumn:
-              anchor?.rowIndex === rowIndex ? anchor.columnIndex : -1,
-          }
-        : null,
-    [rects, rowIndex, anchor]
-  )
+  const selection = rects
+    ? {
+        rowIndex,
+        rects,
+        activeColumn: anchor?.rowIndex === rowIndex ? anchor.columnIndex : -1,
+      }
+    : null
 
   return (
     <div

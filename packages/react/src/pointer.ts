@@ -32,7 +32,7 @@ export function targetOfElement(element: Element | null): PointerTarget | null {
     rowIndex ??
     (c === undefined
       ? undefined
-      : (el.closest<HTMLElement>("[data-row-position]")?.dataset.rowPosition))
+      : el.closest<HTMLElement>("[data-row-position]")?.dataset.rowPosition)
   const r = position === undefined ? undefined : Number(position)
   if (r !== undefined && c !== undefined) {
     return { type: "cell", rowIndex: r, columnIndex: c }

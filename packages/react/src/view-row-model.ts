@@ -39,7 +39,12 @@ function applyMoves<T>(
 ): [from: number, to: number] {
   const [out] = removed
   const [put] = inserted
-  if (out !== undefined && put && removed.length === 1 && inserted.length === 1) {
+  if (
+    out !== undefined &&
+    put &&
+    removed.length === 1 &&
+    inserted.length === 1
+  ) {
     // One row moved: the rows between shift by one place.
     const { at } = put
     if (out < at) rows.copyWithin(out, out + 1, at + 1)
@@ -97,7 +102,11 @@ export function createSheetViewRowModel(view: ViewHolder) {
         // `Row`s are the ones listed last time except where a row changed.
         const { change } = result
         let rows: Row<TFeatures, TData>[]
-        if (last && change?.from === last.result && last.byId === core.rowsById) {
+        if (
+          last &&
+          change?.from === last.result &&
+          last.byId === core.rowsById
+        ) {
           rows = last.rows.slice()
           const [from, to] = applyMoves(rows, change, core.rows)
           for (let p = from; p <= to; p++) {
@@ -107,7 +116,10 @@ export function createSheetViewRowModel(view: ViewHolder) {
           const n = result.rows.length
           rows = new Array<Row<TFeatures, TData>>(n)
           for (let p = 0; p < n; p++) {
-            const row = core.rows[result.sourceIndex(p)] as Row<TFeatures, TData>
+            const row = core.rows[result.sourceIndex(p)] as Row<
+              TFeatures,
+              TData
+            >
             row._displayIndexCache = p
             rows[p] = row
           }

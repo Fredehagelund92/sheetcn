@@ -107,22 +107,19 @@ test("a sort paints in under 100 ms", async ({ page }) => {
 
 const commitRounds = (page: Page, v: SheetView) =>
   rounds("commit", () =>
-    page.evaluate(
-      async (v) => {
-        const pg = (
-          window as unknown as {
-            __playground: {
-              sheet: { setView: (v: SheetView) => void }
-              measureCommits: (runs?: number) => Promise<Stats>
-            }
+    page.evaluate(async (v) => {
+      const pg = (
+        window as unknown as {
+          __playground: {
+            sheet: { setView: (v: SheetView) => void }
+            measureCommits: (runs?: number) => Promise<Stats>
           }
-        ).__playground
-        pg.sheet.setView(v)
-        await new Promise((r) => setTimeout(r, 100))
-        return pg.measureCommits(30)
-      },
-      v
-    )
+        }
+      ).__playground
+      pg.sheet.setView(v)
+      await new Promise((r) => setTimeout(r, 100))
+      return pg.measureCommits(30)
+    }, v)
   )
 
 test("a one-cell commit on a plain grid paints in under 5 ms", async ({
@@ -138,7 +135,9 @@ test("a one-cell commit with a filter and a sort on paints in under 10 ms", asyn
   const commits = await commitRounds(page, {
     filter: {
       match: "all",
-      items: [{ column: "status", op: "isAnyOf", values: ["active", "paused"] }],
+      items: [
+        { column: "status", op: "isAnyOf", values: ["active", "paused"] },
+      ],
     },
     sort: [{ column: "price", dir: "asc" }],
   })

@@ -179,7 +179,9 @@ test("Fit, from the keyboard, fits the active cell's column", async ({
 }) => {
   await page.setViewportSize({ width: 1440, height: 800 })
   await page.goto(`/${NINE}`)
-  const cell = page.locator('[data-row-position="0"] .cell[data-column-index="3"]')
+  const cell = page.locator(
+    '[data-row-position="0"] .cell[data-column-index="3"]'
+  )
   await cell.click()
   const fit = page.getByRole("button", { name: "Fit Status" })
   await fit.focus()
